@@ -1,0 +1,14 @@
+{
+  "id": "set by scripts/build.mjs from package.json",
+  "version": "set by scripts/build.mjs from package.json",
+  "title": "set by scripts/build.mjs from package.json",
+  "vendor": "ArdaDaMarda",
+  "type": "web",
+  "main": "index.html",
+  "icon": "icon.png",
+  "largeIcon": "largeIcon.png",
+  "bgColor": "#0b0d12",
+  "resolution": "1920x1080",
+  "disableBackHistoryAPI": true,
+  "requiredACG": []
+}

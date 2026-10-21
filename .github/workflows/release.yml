@@ -1,0 +1,32 @@
+name: Release
+
+on:
+  push:
+    tags: ['v*']
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+      - name: Tag must match package.json version
+        run: |
+          VERSION="v$(node -p "require('./package.json').version")"
+          if [ "$VERSION" != "$GITHUB_REF_NAME" ]; then
+            echo "Tag $GITHUB_REF_NAME does not match package.json version $VERSION"
+            exit 1
+          fi
+      - run: npm ci
+      - run: npm run check
+      - run: npm run package
+      - uses: softprops/action-gh-release@v2
+        with:
+          files: dist/*.ipk
+          generate_release_notes: true

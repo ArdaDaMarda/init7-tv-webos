@@ -1,0 +1,17 @@
+# Dependencies and build output
+node_modules/
+build/
+dist/
+*.ipk
+
+# Exported chat transcripts (may contain the TV's IP or Developer Mode passphrase)
+20??-??-??-*.txt
+
+# Personal notes (setup details, IPs)
+*.local.md
+
+# Editor / OS clutter
+.vscode/
+.idea/
+Thumbs.db
+.DS_Store

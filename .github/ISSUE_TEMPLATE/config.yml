@@ -1,0 +1,5 @@
+blank_issues_enabled: true
+contact_links:
+  - name: Init7 TV7 service problems
+    url: https://www.init7.net/
+    about: Problems with the TV7 service itself (all devices affected) are for Init7 support, not this project.

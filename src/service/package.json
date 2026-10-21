@@ -1,0 +1,6 @@
+{
+  "name": "relay",
+  "private": true,
+  "description": "Template only: scripts/build.mjs writes the real package.json (name = <app id>.relay) and services.json",
+  "main": "service.js"
+}

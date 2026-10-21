@@ -1,0 +1,40 @@
+name: Bug report
+description: Something doesn't work as expected
+labels: [bug]
+body:
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened?
+      description: What did you do, what did you expect, and what happened instead?
+    validations:
+      required: true
+  - type: input
+    id: channel
+    attributes:
+      label: Channel(s)
+      description: Number and name, e.g. "26 ZDFneo". Does it happen on all channels or only some?
+  - type: input
+    id: tv
+    attributes:
+      label: TV model and webOS version
+      description: Settings → General → About This TV, e.g. "OLED65G59LS, webOS 25, firmware 43.21.77"
+    validations:
+      required: true
+  - type: input
+    id: remote
+    attributes:
+      label: Remote
+      description: e.g. "AI Magic Remote (MR25)", "Magic Remote MR23", "standard IR remote"
+  - type: input
+    id: version
+    attributes:
+      label: App version
+    validations:
+      required: true
+  - type: textarea
+    id: logs
+    attributes:
+      label: Console output (optional)
+      description: From `npm run inspect` → DevTools console. Remove your IP address before posting.
+      render: text

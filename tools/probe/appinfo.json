@@ -1,0 +1,13 @@
+{
+  "id": "io.github.ardadamarda.init7tvprobe",
+  "version": "0.1.0",
+  "vendor": "local",
+  "type": "web",
+  "main": "index.html",
+  "title": "Init7 TV Probe",
+  "icon": "icon.png",
+  "largeIcon": "largeIcon.png",
+  "resolution": "1920x1080",
+  "disableBackHistoryAPI": true,
+  "requiredACG": []
+}

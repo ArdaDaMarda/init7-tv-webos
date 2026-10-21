@@ -1,0 +1,41 @@
+{
+  "name": "init7-tv-webos",
+  "version": "1.0.0",
+  "description": "Unofficial LG webOS TV app for Init7 TV7: all channels incl. multicast, fast switching, programme guide",
+  "license": "MIT",
+  "private": true,
+  "type": "module",
+  "webos": {
+    "appId": "io.github.ardadamarda.init7tv",
+    "title": "TV for Init7"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "build": "node scripts/build.mjs",
+    "package": "node scripts/build.mjs && ares-package build/app build/service -o dist",
+    "deploy": "node scripts/deploy.mjs",
+    "dev": "node scripts/build.mjs --dev && ares-package build/app build/service -o dist && node scripts/deploy.mjs",
+    "inspect": "node scripts/deploy.mjs --inspect-only",
+    "lint": "eslint .",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
+    "test": "node --test \"test/*.test.mjs\"",
+    "check": "npm run lint && npm run format:check && npm test"
+  },
+  "devDependencies": {
+    "@eslint/js": "^10.0.1",
+    "@webos-tools/cli": "^3.2.6",
+    "esbuild": "^0.28.2",
+    "eslint": "^10.13.0",
+    "globals": "^17.13.0",
+    "prettier": "^3.9.10"
+  },
+  "allowScripts": {
+    "@webos-tools/cli": true,
+    "esbuild": true,
+    "cpu-features": false,
+    "ssh2": false
+  }
+}
