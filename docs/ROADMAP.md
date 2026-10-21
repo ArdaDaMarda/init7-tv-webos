@@ -12,7 +12,7 @@ Status of the project and open items. Once the repository is on GitHub, the open
 | Restructured code (ES modules + esbuild), new app id `local.init7tv.app` | ✅ Installed on the TV with `npm run dev`; lineup, EPG, HLS (SRF 1, ZDF) and multicast via the relay (ZDFneo, Phoenix) verified |
 | Audio track list with broadcaster labels (relay `/info`) | ✅ Verified on the TV: Das Erste, arte D, SRF 1, ZDFneo |
 | Audio switching via the relay filter (`?audio=<pid>`) | ✅ In sync, verified by ear on Das Erste; switch ~1.5 s with a black screen |
-| CI / release workflows | ⚠️ Written, not yet run (needs the GitHub repository) |
+| CI / release workflows | ✅ Running on GitHub; v1.0.0 released with the `.ipk` built by the release workflow |
 
 ## Verification on a real TV
 
@@ -50,8 +50,8 @@ Status of the project and open items. Once the repository is on GitHub, the open
       replace it with a link to LG's product page.
 - [x] First release: all changes so far combined into v1.0.0 (see CHANGELOG)
 - [ ] Optional: let Init7 know about the project (they publish the multicast M3U openly)
-- [ ] `git init`, first commit, create the repository, push. Then check that CI runs green and create the first release
-      with `git tag v1.0.0`.
+- [x] Repository published (2026-10-21): <https://github.com/ArdaDaMarda/init7-tv-webos>. CI green on the first push;
+      `v1.0.0` released with `io.github.ardadamarda.init7tv_1.0.0_all.ipk`.
 - [ ] Turn this roadmap into GitHub issues; label the TV tests "help wanted"
 
 ## Improvements
