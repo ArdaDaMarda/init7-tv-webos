@@ -22,7 +22,7 @@ jobs:
       - run: npm run format:check
       - run: npm test
       - run: npm run package
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: ipk
           path: dist/*.ipk
