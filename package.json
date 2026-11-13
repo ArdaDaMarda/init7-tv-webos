@@ -1,6 +1,6 @@
 {
   "name": "init7-tv-webos",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "description": "Unofficial LG webOS TV app for Init7 TV7: all channels incl. multicast, fast switching, programme guide",
   "license": "MIT",
   "private": true,

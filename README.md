@@ -89,7 +89,7 @@ The pointer works as well: click rows, guide cells, or the picture.
 
 | TV | webOS | Status |
 |---|---|---|
-| LG OLED65G59LS (G5, 2025), firmware 43.21.77 | webOS 25 | ✅ Tested in Developer Mode and rooted ([details](docs/ROADMAP.md#status)) |
+| LG OLED65G59LS (G5, 2025), firmware 43.21.77 | webOS 25 | ✅ Tested in Developer Mode and rooted ([details](docs/ROADMAP.md#status-v110)) |
 | Older models | webOS 5 – 24 | ❓ Untested. The code targets webOS 5 syntax, but codec and multicast support may differ |
 
 Please report your TV in a [compatibility issue](../../issues/new/choose).
@@ -106,7 +106,7 @@ Please report your TV in a [compatibility issue](../../issues/new/choose).
 
 On 2026-11-13 the project was reviewed with Anthropic's Claude Fable 5.2 model: a read-through of the whole codebase
 and a second look at the official Android app for ideas. The fixes and improvements that came out of it are listed
-under "Unreleased" in the [changelog](CHANGELOG.md), and the findings are in
+under version 1.1.0 in the [changelog](CHANGELOG.md), and the findings are in
 [Decisions & findings](docs/DECISIONS.md) and the [roadmap](docs/ROADMAP.md).
 
 ## License

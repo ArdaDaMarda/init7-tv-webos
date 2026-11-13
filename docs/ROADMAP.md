@@ -2,7 +2,7 @@
 
 Status of the project and open items.
 
-## Status
+## Status (v1.1.0)
 
 | Area | State |
 |---|---|
@@ -12,11 +12,11 @@ Status of the project and open items.
 | Restructured code (ES modules + esbuild), app id `io.github.ardadamarda.init7tv` | ✅ The v1.0.0 release `.ipk` from GitHub is installed on the TV; lineup, EPG, HLS and multicast via the relay verified |
 | Audio track list with broadcaster labels (relay `/info`) | ✅ Verified on the TV: Das Erste, arte D, SRF 1, ZDFneo |
 | Audio switching via the relay filter (`?audio=<pid>`) | ✅ In sync, verified by ear on Das Erste; switch ~1.5 s with a black screen |
-| CI / release workflows | ✅ Running on GitHub; v1.0.0 released with the `.ipk` built by the release workflow |
-| Unreleased: richer programme details in the guide and banner | ✅ Verified on the TV (2026-11-13) |
-| Unreleased: fast zapping (only the channel you stop on is loaded) | ✅ Verified on the TV by hand (2026-11-13) |
-| Unreleased: relay drops a client that stops reading (32 MB backlog) | ✅ Verified on the TV with a deliberately slow client: `/stats` → `dropped: 1` |
-| Unreleased: guide data reloaded every 3 h; parallel start | ✅ Unit tests and desktop Chrome; not observed over days on the TV yet |
+| CI / release workflows | ✅ Running on GitHub; v1.0.0 and v1.1.0 released with the `.ipk` built by the release workflow |
+| v1.1.0: richer programme details in the guide and banner | ✅ Verified on the TV (2026-11-13) |
+| v1.1.0: fast zapping (only the channel you stop on is loaded) | ✅ Verified on the TV by hand (2026-11-13) |
+| v1.1.0: relay drops a client that stops reading (32 MB backlog) | ✅ Verified on the TV with a deliberately slow client: `/stats` → `dropped: 1` |
+| v1.1.0: guide data reloaded every 3 h; parallel start | ✅ Unit tests and desktop Chrome; not observed over days on the TV yet |
 | Rooted TV (Homebrew Channel) | ✅ The app runs on the rooted test TV. Installing needed a workaround, see [Contributing](../CONTRIBUTING.md#rooted-tvs) |
 
 ## Verification on a real TV
