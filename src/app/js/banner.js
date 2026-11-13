@@ -1,5 +1,6 @@
 // Channel info banner: logo, now/next, progress. Expanded mode adds the description.
 import { channels } from './channels.js';
+import { creditsText, metaParts } from './details.js';
 import { epg } from './epg.js';
 import { esc, hhmm, progress } from './util.js';
 
@@ -12,12 +13,16 @@ function render() {
   if (!channel) return;
   const { now, next } = epg.nowNext(channel.id);
   const fav = channels.isFav(channel.id) ? '<span class="fav">★</span>' : '';
+  const meta = expanded && now ? metaParts(now).join(' · ') : '';
+  const credits = expanded && now ? creditsText(now.credits) : '';
   const nowHtml = now
     ? `<div class="b-now">
         <div class="b-time">${hhmm(now.start)} – ${hhmm(now.stop)}</div>
         <div class="b-title">${esc(now.title)}</div>
         ${now.sub ? `<div class="b-sub">${esc(now.sub)}</div>` : ''}
         <div class="progress"><div style="width:${progress(now).toFixed(1)}%"></div></div>
+        ${meta ? `<div class="b-meta">${esc(meta)}</div>` : ''}
+        ${credits ? `<div class="b-credits">${esc(credits)}</div>` : ''}
         ${expanded && now.desc ? `<div class="b-desc">${esc(now.desc)}</div>` : ''}
       </div>`
     : '<div class="b-now"><div class="b-title dim">No programme information</div></div>';

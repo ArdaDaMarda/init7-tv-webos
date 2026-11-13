@@ -1,6 +1,7 @@
 // Full-screen programme guide grid with the live picture as picture-in-picture.
 import { actions } from './actions.js';
 import { channels } from './channels.js';
+import { creditsText, metaParts } from './details.js';
 import { epg } from './epg.js';
 import { player } from './player.js';
 import { KEY as K, esc, hhmm, day } from './util.js';
@@ -53,12 +54,15 @@ function renderInfo() {
     return;
   }
   const live = p.start <= Date.now() && Date.now() < p.stop;
+  const meta = [day(p.start), `${hhmm(p.start)} – ${hhmm(p.stop)}`].concat(metaParts(p));
+  const credits = creditsText(p.credits);
   info.innerHTML = `
     <div class="g-ch">${ch.num} · ${esc(ch.name)}${live ? ' <span class="live">LIVE</span>' : ''}</div>
     <div class="g-title">${esc(p.title)}</div>
-    <div class="g-meta">${day(p.start)} · ${hhmm(p.start)} – ${hhmm(p.stop)}${p.cats.length ? ' · ' + esc(p.cats.join(', ')) : ''}</div>
+    <div class="g-meta">${esc(meta.join(' · '))}</div>
     ${p.sub ? `<div class="g-sub">${esc(p.sub)}</div>` : ''}
-    ${p.desc ? `<div class="g-desc">${esc(p.desc)}</div>` : ''}`;
+    ${credits ? `<div class="g-credits">${esc(credits)}</div>` : ''}
+    ${p.desc ? `<div class="g-desc${p.sub && credits ? ' short' : ''}">${esc(p.desc)}</div>` : ''}`;
 }
 
 function renderGrid() {

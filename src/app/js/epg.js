@@ -1,6 +1,7 @@
 // Programme guide store. Loads the whole lineup in 6-hour blocks on demand.
 import { api } from './api.js';
 import { idFromSrc } from './channels.js';
+import { parseEpisode } from './details.js';
 
 const BLOCK = 6 * 3600000;
 const KEEP_PAST = 12 * 3600000;
@@ -29,6 +30,11 @@ export function createEpgStore(load) {
         sub: it.sub_title || '',
         desc: it.desc || '',
         cats: it.categories || [],
+        country: it.country || '',
+        episode: parseEpisode(it.episode_num),
+        age: it.rating_system === 'age' ? Number(it.rating) || 0 : 0,
+        subtitles: it.subtitles === true,
+        credits: it.credits && it.credits.length ? it.credits : null,
       });
       touched.add(arr);
     }

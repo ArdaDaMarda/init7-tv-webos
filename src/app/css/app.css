@@ -196,6 +196,23 @@ body.guide-open #video {
   -webkit-box-orient: vertical;
   overflow: hidden;
 }
+.b-meta {
+  margin-top: 16px;
+  font-size: 25px;
+  color: #8fb4ff;
+}
+.b-credits {
+  margin-top: 6px;
+  font-size: 25px;
+  color: var(--dim);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.b-meta + .b-desc,
+.b-credits + .b-desc {
+  margin-top: 10px;
+}
 .b-next {
   margin-top: 16px;
   font-size: 27px;
@@ -390,6 +407,17 @@ body.guide-open #video {
   margin-top: 8px;
   font-size: 26px;
   color: #8fb4ff;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.g-credits {
+  margin-top: 6px;
+  font-size: 24px;
+  color: var(--dim);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 .g-sub {
   margin-top: 8px;
@@ -408,6 +436,10 @@ body.guide-open #video {
   -webkit-line-clamp: 4;
   -webkit-box-orient: vertical;
   overflow: hidden;
+}
+.g-desc.short {
+  margin-top: 8px;
+  -webkit-line-clamp: 3;
 }
 .g-grid {
   position: absolute;

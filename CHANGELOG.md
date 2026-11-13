@@ -5,6 +5,11 @@ and versions follow [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Added
+
+- Richer programme details in the guide and in the expanded banner: duration, season and episode, country, age
+  rating, a "Subtitles" note, and host, cast, guests and director where the EPG provides them.
+
 ## [1.0.0] - 2026-10-21
 
 First public version.
