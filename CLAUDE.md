@@ -22,7 +22,8 @@ npm run check     # lint + format check + unit tests (same as CI), run before ev
 npm test          # node --test, no TV needed
 npm run build     # bundle into build/ (app + service, manifests generated)
 npm run package   # build + dist/<appId>_<version>_all.ipk
-npm run dev       # dev build, package, install on the default TV and launch (needs a TV in Developer Mode)
+npm run dev       # dev build, package, install on the default TV and launch (needs a TV in Developer Mode;
+                  # on a rooted TV the install step may fail, see CONTRIBUTING.md → Rooted TVs)
 npm run inspect   # DevTools tunnel to the running app (takes ~30 s to print the URL)
 ```
 
@@ -32,9 +33,9 @@ The webOS CLI is a local dev dependency, so call it as `npx ares-*`, never as a 
 
 - `src/app/js/`: ES modules bundled by esbuild into one IIFE (`build/app/app.js`).
   - `main.js` is the entry point and does key routing.
-  - The other modules each cover one concern: `player`, `tracks`, `relay`, `epg`, `chlist`, `guide`, `menu`, and so on.
+  - The other modules each cover one concern: `player`, `tracks`, `relay`, `epg`, `details`, `chlist`, `guide`, `menu`, and so on.
 - `src/service/`: CommonJS on the TV's Node.js.
-  - `relay-core.js` holds the pure helpers: PMT parsing, CRC-32, the audio filter.
+  - `relay-core.js` holds the pure helpers: PMT parsing, CRC-32, the audio filter, the backlog measurement.
   - `service.js` holds the HTTP server and the Luna methods.
 - `scripts/`: `build.mjs` and `deploy.mjs`.
   - The app id, title and version come from `package.json` (`webos`, `version`).
@@ -50,6 +51,10 @@ The webOS CLI is a local dev dependency, so call it as `npx ares-*`, never as a 
 - **Multicast-only channels need the relay.** About 140 of the 242 channels can't be played by the web engine (it can't open `udp://`) and go through `http://127.0.0.1:8077/udp/<group>:<port>`.
 - **Never switch audio tracks inside the webOS player.** Using `audioTracks[i].enabled` or a live `selectTrack` desyncs or stalls the pipeline. Instead, reload the stream through the relay with `?audio=<pid>`, which filters the other audio PIDs and rewrites the PMT. LG `selectTrack` is only a fallback.
 - **Track labels come from the multicast PMT** (`/info/<group>:<port>`). The special language codes (`mis`, `mul`, `und`, `zxx`, `nar`, `qaa`–`qtz`) are wildcards when matching, and are shown as the code rather than guessed.
+- **The app stays open for days** (TVs suspend apps instead of closing them). Anything loaded once goes stale: guide blocks are reloaded after 3 hours, the lineup every 6 hours. Keep that in mind for new cached data.
+- **The relay must not buffer without limit.** It writes the live stream without pausing the socket and drops a client at a 32 MB backlog.
+- **EPG optional fields are often empty** (credits 19%, age rating 26%; year, pictures and star rating never). Show a detail only when it exists; see `docs/API.md` → EPG fields.
+- **UI changes are checked in desktop Chrome** with `tools/cdp.mjs` (see CONTRIBUTING.md → Testing without a TV), then once on the TV. Playback, audio and relay changes always need the TV.
 - **Remote:** the target is the LG AI Magic Remote. The TV grabs GUIDE, ♡ and AI, so don't rely on them. ◀ opens the guide, ▶ the menu, OK the channel list, and hold-OK toggles a favourite.
 
 ## Never commit

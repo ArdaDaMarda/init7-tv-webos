@@ -194,4 +194,10 @@ function createAudioFilter(keepPid) {
   };
 }
 
-module.exports = { payload, parseUdpPath, parsePmt, crc32, rewritePmt, createAudioFilter };
+// Bytes written to an HTTP response that the client has not read yet.
+function backlog(res) {
+  if (typeof res.writableLength === 'number') return res.writableLength;
+  return (res.socket && res.socket.bufferSize) || 0;
+}
+
+module.exports = { backlog, payload, parseUdpPath, parsePmt, crc32, rewritePmt, createAudioFilter };

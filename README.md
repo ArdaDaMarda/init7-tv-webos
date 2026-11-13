@@ -14,9 +14,11 @@ a programme guide.
 
 - **All 242 Init7 channels**: 102 via HLS, plus 140 multicast-only channels through a small relay that runs on the
   TV itself. No extra device and no router changes are needed.
-- **Fast switching**: ~0.6 s on HLS channels, ~1.4 s on multicast channels
-- **Programme guide** for 241 channels: info banner with now/next, programme details, and a guide grid with live
-  picture-in-picture
+- **Fast switching**: ~0.6 s on HLS channels, ~1.4 s on multicast channels. When you zap quickly through several
+  channels, only the one you stop on is loaded.
+- **Programme guide** for 241 channels: info banner with now/next, and a guide grid with live picture-in-picture
+- **Programme details** where the broadcaster provides them: episode title, genre, duration, season and episode,
+  country, age rating, host, cast and director
 - **Channel list** with logos, what's on now, favourites and filters (All / ★ / DE / FR / IT / EN / World)
 - **Audio track list** with the broadcaster's descriptions, e.g. "Deutsch · Audio description", "Deutsch · Clean
   audio", "Dolby Digital 5.1", read live from the multicast stream. Switching stays in A/V sync (the relay delivers
@@ -57,6 +59,12 @@ Sideloaded apps stay installed only while the Developer Mode **session** is acti
 shows the remaining time. **Press "Extend" there before it runs out.** A calendar reminder helps. If the session
 expires, the TV removes the app and its favourites; re-enable Developer Mode and install again.
 
+### Rooted TVs
+
+On a rooted TV (Homebrew Channel) the app stays installed without a Developer Mode session. The app is not in the
+Homebrew Channel repository yet, so install the `.ipk` yourself; see
+[Contributing](CONTRIBUTING.md#rooted-tvs) for what worked on the test TV.
+
 ## Remote control
 
 <img src="docs/images/lg-ai-magic-remote-mr25.png" alt="LG AI Magic Remote (MR25)" width="110" align="right">
@@ -81,7 +89,7 @@ The pointer works as well: click rows, guide cells, or the picture.
 
 | TV | webOS | Status |
 |---|---|---|
-| LG OLED65G59LS (G5, 2025), firmware 43.21.77 | webOS 25 | ✅ Tested ([details](docs/ROADMAP.md#status-v100)) |
+| LG OLED65G59LS (G5, 2025), firmware 43.21.77 | webOS 25 | ✅ Tested in Developer Mode and rooted ([details](docs/ROADMAP.md#status)) |
 | Older models | webOS 5 – 24 | ❓ Untested. The code targets webOS 5 syntax, but codec and multicast support may differ |
 
 Please report your TV in a [compatibility issue](../../issues/new/choose).
@@ -93,6 +101,13 @@ Please report your TV in a [compatibility issue](../../issues/new/choose).
 - [Init7 API notes](docs/API.md): the endpoints the app uses
 - [Roadmap](docs/ROADMAP.md): status, open tests, ideas
 - [Contributing](CONTRIBUTING.md): building, deploying to your TV, debugging, tests
+
+## Review
+
+On 2026-11-13 the project was reviewed with Anthropic's Claude Fable 5.2 model: a read-through of the whole codebase
+and a second look at the official Android app for ideas. The fixes and improvements that came out of it are listed
+under "Unreleased" in the [changelog](CHANGELOG.md), and the findings are in
+[Decisions & findings](docs/DECISIONS.md) and the [roadmap](docs/ROADMAP.md).
 
 ## License
 

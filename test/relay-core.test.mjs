@@ -34,3 +34,10 @@ test('payload passes raw MPEG-TS through and strips RTP headers', () => {
   rtpCsrc[0] = 0x81; // one CSRC entry (+4 bytes)
   assert.deepEqual(payload(rtpCsrc), ts);
 });
+
+test('backlog reads the unread bytes of a response', () => {
+  const { backlog } = require('../src/service/relay-core.js');
+  assert.equal(backlog({ writableLength: 1234 }), 1234);
+  assert.equal(backlog({ socket: { bufferSize: 99 } }), 99); // older Node.js without writableLength
+  assert.equal(backlog({}), 0);
+});

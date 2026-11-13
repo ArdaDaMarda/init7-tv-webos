@@ -23,6 +23,13 @@ let spinnerTimer = 0;
 let numBuf = '';
 let numTimer = 0;
 let exitArmed = 0;
+// Fast zapping: the first press switches at once; while presses keep coming, only the banner follows
+// and the stream starts once they pause, so the channels in between are never loaded.
+const ZAP_BURST = 400;
+const ZAP_SETTLE = 250;
+let zapTarget = null;
+let zapTimer = 0;
+let lastZap = 0;
 
 function toast(msg, ms = 2500) {
   toastEl.textContent = msg;
@@ -53,6 +60,9 @@ function activeList() {
 
 function tune(ch, opts = {}) {
   if (!ch) return;
+  clearTimeout(zapTimer);
+  zapTimer = 0;
+  zapTarget = null;
   if ('favMode' in opts) favMode = opts.favMode;
   settings.set('lastChannel', ch.id);
   player.play(ch);
@@ -65,9 +75,20 @@ actions.toast = toast;
 function zap(dir) {
   const list = activeList();
   if (!list.length) return;
-  const cur = player.current();
+  const cur = zapTarget || player.current();
   const i = cur ? list.findIndex((c) => c.id === cur.id) : -1;
-  tune(list[(i + dir + list.length) % list.length]);
+  const next = list[(i + dir + list.length) % list.length];
+  const now = Date.now();
+  const burst = zapTimer || now - lastZap < ZAP_BURST;
+  lastZap = now;
+  if (!burst) {
+    tune(next);
+    return;
+  }
+  zapTarget = next;
+  banner.show(next);
+  clearTimeout(zapTimer);
+  zapTimer = setTimeout(() => tune(zapTarget), ZAP_SETTLE);
 }
 
 function commitNumber() {
@@ -260,6 +281,12 @@ async function start() {
     tune(startChannel());
   }
 
+  // The guide data needs neither the authorization check nor the lineup, so all three load side by side.
+  const epgWindow = () => epg.ensure(Date.now() - 3600000, Date.now() + 6 * 3600000);
+  epgWindow();
+  const lineup = loadChannels();
+  lineup.catch(() => {}); // awaited below; this only avoids an unhandled rejection if the check fails first
+
   try {
     const auth = await api.allowed();
     if (!auth.allowed) {
@@ -269,7 +296,7 @@ async function start() {
       );
       return;
     }
-    await loadChannels();
+    await lineup;
   } catch (e) {
     console.warn('[init7tv] start failed', e);
     if (!player.current()) status.show('Init7 TV server not reachable.\nRetrying…');
@@ -280,8 +307,7 @@ async function start() {
   const cur = player.current();
   const fresh = cur && channels.byId(cur.id);
   if (!fresh || fresh.hls !== cur.hls) tune(fresh || startChannel());
-
-  epg.ensure(Date.now() - 3600000, Date.now() + 6 * 3600000);
+  epgWindow(); // no-op unless the first attempt failed
 }
 
 // Housekeeping: clock/progress refresh, keep the EPG ahead of "now", reload the lineup.

@@ -3,12 +3,15 @@
 const Service = require('webos-service');
 const dgram = require('dgram');
 const http = require('http');
-const { payload, parseUdpPath, parsePmt, createAudioFilter } = require('./relay-core');
+const { backlog, payload, parseUdpPath, parsePmt, createAudioFilter } = require('./relay-core');
 const { name: SERVICE_ID } = require('./package.json'); // written by the build: <app id>.relay
 
 const PORT = 8077;
+// A player that stops reading while keeping the connection open would make the relay buffer the live
+// stream without limit. Past this backlog (about 20 s of HD) the client is dropped; the app reconnects.
+const MAX_BACKLOG = 32 * 1024 * 1024;
 const service = new Service(SERVICE_ID);
-const stats = { started: Date.now(), clients: 0, requests: 0, packets: 0, bytes: 0, lastError: null };
+const stats = { started: Date.now(), clients: 0, requests: 0, packets: 0, bytes: 0, dropped: 0, lastError: null };
 let server = null;
 let keepAlive = null;
 let subscribers = 0;
@@ -55,6 +58,13 @@ function handle(req, res) {
   sock.on('message', (buf) => {
     stats.packets++;
     stats.bytes += buf.length;
+    if (backlog(res) > MAX_BACKLOG) {
+      stats.dropped++;
+      stats.lastError = 'client too slow, dropped ' + group;
+      res.destroy();
+      close();
+      return;
+    }
     const data = filter ? filter(payload(buf)) : payload(buf);
     if (data.length) res.write(data); // live stream: never pause the socket, a slow reader just buffers briefly
   });

@@ -17,21 +17,25 @@
 
 ## Data flow
 
-1. **Startup** (`main.js`): the cached lineup is started immediately with the last channel. In parallel the app checks
-   access (`/api/v4/allowed/`) and reloads the lineup.
+1. **Startup** (`main.js`): the cached lineup is started immediately with the last channel. Side by side the app
+   checks access (`/api/v4/allowed/`), reloads the lineup and loads the guide data around "now"; none of the three
+   waits for another.
 2. **Lineup** (`channels.js` → `buildLineup`): the Init7 M3U provides all 242 channels in official order with logos and
    language groups. The channel API provides HLS URLs for 102 of them. They are joined by **multicast address**, which
    is also the channel id everywhere in the app (favourites, last channel, EPG).
 3. **EPG** (`epg.js`): programmes for *all* channels are loaded in 6-hour blocks (`/api/epg/?stop__gte&start__lte`,
-   about 3 pages of 500 entries per block). Blocks load on demand around "now" and wherever the guide scrolls. The EPG
-   references channels by their `src` (multicast address), so it maps directly onto the lineup.
+   about 6 pages of 500 entries per block). Blocks load on demand around "now" and wherever the guide scrolls, and a
+   block that is not yet in the past is reloaded after 3 hours, so schedule changes arrive while the app stays open.
+   The EPG references channels by their `src` (multicast address), so it maps directly onto the lineup.
 4. **Playback** (`player.js`): an HLS channel is given straight to the native `<video>` element. A multicast-only
    channel gets the relay URL (`video/mp2t`). A watchdog reloads the stream if playback time stops advancing, with
-   exponential backoff on errors.
+   exponential backoff on errors. When channel-switch presses follow each other within 400 ms (`zap` in `main.js`),
+   only the banner follows and the stream starts 250 ms after the last press.
 5. **Relay** (`relay.js` ↔ `src/service/service.js`): the app opens a Luna subscription to `<appId>.relay/start`,
    which starts the HTTP server and keeps the service alive while the app runs. Each HTTP request joins one multicast
    group and streams its UDP payload (raw MPEG-TS; RTP headers would be stripped) to the player. Closing the request
-   leaves the group. Endpoints:
+   leaves the group. A client that stops reading is dropped once 32 MB are unread, so the relay cannot fill the
+   TV's memory. Endpoints:
    - `/udp/<group>:<port>`: the stream as is
    - `/udp/<group>:<port>?audio=<pid>`: the stream with **only this audio track**. The PMT is rewritten with a new
      CRC and the other audio PIDs are dropped (`createAudioFilter` in `relay-core.js`).
@@ -59,6 +63,10 @@ Plain DOM, no framework. Each overlay (`banner`, `chlist`, `guide`, `menu`) is a
 `show/hide/visible/onKey`. `main.js` routes keys to whichever overlay is visible, otherwise to live-TV handling.
 Overlays that need to tune or show a toast call `actions.tune` / `actions.toast`, which `main.js` fills in, so the
 module graph has no cycles.
+
+Programme details (`details.js`) are pure functions that turn the EPG's optional fields into the meta line
+(duration, genre, season/episode, country, age rating, subtitles) and the credits line shown in the guide and the
+expanded banner. Each part appears only when the EPG provides it.
 
 The guide shows the live picture as picture-in-picture. The `<video>` element is resized via `body.guide-open`, and the
 guide backdrop sits *below* the video in z-order while its content sits above.

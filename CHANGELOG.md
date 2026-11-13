@@ -10,6 +10,19 @@ and versions follow [Semantic Versioning](https://semver.org/).
 - Richer programme details in the guide and in the expanded banner: duration, season and episode, country, age
   rating, a "Subtitles" note, and host, cast, guests and director where the EPG provides them.
 
+### Changed
+
+- Fast zapping: while channel-switch presses keep coming, only the banner follows; the stream starts once they
+  pause, so the channels in between are never loaded. A single press still switches at once.
+- Faster start: the programme guide, the channel list and the authorization check load side by side.
+
+### Fixed
+
+- The guide no longer goes stale while the app stays open for days: programme data is reloaded every 3 hours and
+  picks up changed, added and cancelled programmes.
+- The relay drops a client that stops reading the stream (32 MB backlog) instead of buffering without limit. The
+  app reconnects by itself. `/stats` counts these as `dropped`.
+
 ## [1.0.0] - 2026-10-21
 
 First public version.

@@ -78,3 +78,73 @@ test('prune drops programmes older than 12 h and notifies listeners on load', as
     ['new'],
   );
 });
+
+test('a stale block is reloaded and picks up changed, added and cancelled programmes', async () => {
+  let now = T0 + H;
+  let data = [prog('a', 1, 2, 'Old title'), prog('b', 2, 3), prog('gone', 3, 4)];
+  let calls = 0;
+  const store = createEpgStore(
+    async () => {
+      calls++;
+      return data;
+    },
+    () => now,
+  );
+  await store.ensure(T0, T0 + 6 * H);
+  await store.ensure(T0, T0 + 6 * H); // fresh: no second request
+  assert.equal(calls, 1);
+
+  data = [prog('a', 1, 2, 'New title'), prog('b', 2, 3), prog('c', 3, 5)];
+  now += 2 * H;
+  await store.ensure(T0, T0 + 6 * H); // 2 h old: still fresh
+  assert.equal(calls, 1);
+  now += 1.5 * H;
+  await store.ensure(T0, T0 + 6 * H); // 3.5 h old: reloaded
+  assert.equal(calls, 2);
+  assert.deepEqual(
+    store.range(ID, T0, T0 + 6 * H).map((p) => p.id + ':' + p.title),
+    ['a:New title', 'b:b', 'c:c'],
+  );
+});
+
+test('blocks entirely in the past are not reloaded', async () => {
+  let now = T0 + H;
+  let calls = 0;
+  const store = createEpgStore(
+    async () => {
+      calls++;
+      return [prog('a', 1, 2)];
+    },
+    () => now,
+  );
+  await store.ensure(T0, T0 + 6 * H);
+  now = T0 + 10 * H;
+  await store.ensure(T0, T0 + 6 * H);
+  assert.equal(calls, 1);
+});
+
+test('a failed refresh keeps the old data and waits before retrying', async () => {
+  let now = T0 + H;
+  let fail = false;
+  let calls = 0;
+  const store = createEpgStore(
+    async () => {
+      calls++;
+      if (fail) throw new Error('offline');
+      return [prog('a', 1, 2)];
+    },
+    () => now,
+  );
+  await store.ensure(T0, T0 + 6 * H);
+  fail = true;
+  now += 3.5 * H;
+  await store.ensure(T0, T0 + 6 * H);
+  assert.equal(calls, 2);
+  assert.equal(store.at(ID, T0 + 1.5 * H).id, 'a');
+  now += 60000;
+  await store.ensure(T0, T0 + 6 * H); // 1 min later: no retry yet
+  assert.equal(calls, 2);
+  now += 5 * 60000;
+  await store.ensure(T0, T0 + 6 * H);
+  assert.equal(calls, 3);
+});
