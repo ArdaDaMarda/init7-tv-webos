@@ -1,6 +1,7 @@
 // Native webOS media pipeline. The streams are DVB passthrough (MPEG-2/H.264 video,
 // MP2/AC-3 audio), which only the TV's hardware player decodes - not hls.js/MSE.
 // It plays both HLS and the relay's plain MPEG-TS over HTTP.
+import { streamId } from './channels.js';
 import { lunaCall } from './luna.js';
 import { relay } from './relay.js';
 import { settings } from './settings.js';
@@ -61,7 +62,7 @@ function load() {
   attach(null);
   relay.ready().then(
     () => {
-      if (channel === ch) attach(relay.url(ch.id, pid), 'video/mp2t');
+      if (channel === ch) attach(relay.url(streamId(ch), pid), 'video/mp2t');
     },
     (e) => {
       console.warn('[init7tv] ' + e.message);
@@ -140,7 +141,7 @@ function reloadWithTrack(i) {
 
 // Fetches the track descriptions; if track `want` (> 0) is waiting for them, switches to it.
 function loadTrackInfo(ch, want) {
-  fetchTrackInfo(ch.id).then(
+  fetchTrackInfo(streamId(ch)).then(
     (info) => {
       if (channel !== ch) return;
       if (matchesPlayer(info, trackLangs)) {
@@ -172,7 +173,8 @@ video.addEventListener('playing', () => {
   }
   const at = tracks();
   trackLangs = at ? Array.from({ length: at.length }, (_, i) => at[i].language) : [];
-  if (!trackInfo && matchesPlayer(cachedTrackInfo(channel.id), trackLangs)) trackInfo = cachedTrackInfo(channel.id);
+  if (!trackInfo && matchesPlayer(cachedTrackInfo(streamId(channel)), trackLangs))
+    trackInfo = cachedTrackInfo(streamId(channel));
   const i = initialTrack();
   pendingAudio = null;
   if (i > 0 && trackInfo) {
@@ -219,6 +221,12 @@ export const player = {
   },
   resume() {
     if (channel) play(channel);
+  },
+  // Restarts the current stream by hand (menu entry), keeping the chosen audio track.
+  reload() {
+    if (!channel) return;
+    if (pendingAudio === null && audioIndex) pendingAudio = audioIndex;
+    play(channel);
   },
   set onState(fn) {
     onState = fn;

@@ -36,15 +36,18 @@ npx ares-install -d tvroot --list
 npx ares-launch -d tvroot <app id>
 ```
 
-On the test TV (LG G5, webOS 25) `ares-install` of a package failed over this login with "Unable to exec", so
-`npm run dev` did not work there. What worked:
+On the test TV (LG G5, webOS 25) `ares-install` of a package failed over this login with "Unable to exec". When
+`ares-install` fails, `npm run dev` and `npm run deploy` therefore fall back to the steps below by themselves, so
+`npm run dev -- --device tvroot` works there. The cause of "Unable to exec": after an SFTP upload, the same SSH
+session can't start another command, so the fallback uses one session for the upload and a second one for the
+installer call. By hand, what worked:
 
 1. `npm run package`, then copy the `.ipk` to `/media/developer/temp/` on the TV over SSH.
 2. On the TV: `luna-send -i -f luna://com.webos.appInstallService/dev/install
-   '{"id":"<app id>","ipkUrl":"/media/developer/temp/<file>.ipk","subscribe":true}'`.
-3. If the installer does not answer (this happened once, under load): for an update of an already installed app,
-   unpack the `.ipk` and copy the changed files into
-   `/media/developer/apps/usr/palm/applications/<app id>/` and `…/services/<app id>.relay/`, then restart the app.
+   '{"id":"<app id>","ipkUrl":"/media/developer/temp/<file>.ipk","subscribe":true}' < /dev/null`.
+   It reports the states up to `installed`; stop it then (the closing "install has been disconnected" is harmless).
+3. **Give `luna-send` `< /dev/null` as its input** when you run it over a non-interactive SSH session. Without it,
+   `luna-send` exited at once with no output and nothing was installed, which looked like a dead installer.
 
 Change the default root password of a rooted TV, or switch to key-based login.
 
@@ -97,7 +100,7 @@ queried with `fetch()` from the app's DevTools console:
 
 | Relay URL (on the TV) | Returns |
 |---|---|
-| `http://127.0.0.1:8077/stats` | Counters: clients, requests, packets, bytes, dropped clients, last error |
+| `http://127.0.0.1:8077/stats` | Counters (clients, requests, packets, bytes, dropped clients, last error), the joined channels with their buffer, and the last 30 requests (player headers, time to first byte, bytes after 0.5–5 s, burst size, how they ended) |
 | `http://127.0.0.1:8077/info/<group>:<port>` | The channel's audio tracks from the multicast PMT (PID, codec, language, purpose) |
 | `http://127.0.0.1:8077/udp/<group>:<port>[?audio=<pid>]` | The stream, optionally with only one audio track |
 

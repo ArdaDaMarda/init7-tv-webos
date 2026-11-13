@@ -1,6 +1,12 @@
 // Init7 TV7 REST API (the endpoints the official Android TV app uses).
 // Access is granted by the client's Init7 IP address; no login is involved.
-import { API_BASE, M3U_URL } from './config.js';
+import { API_BASE, FHD_HLS_URL, FHD_MC_URL, M3U_URL } from './config.js';
+
+async function getText(url) {
+  const r = await fetch(url);
+  if (!r.ok) throw new Error('HTTP ' + r.status);
+  return r.text();
+}
 
 async function getJson(url, retries = 2) {
   for (let attempt = 0; ; attempt++) {
@@ -34,9 +40,15 @@ export const api = {
   // All programmes overlapping [from, to] across every channel.
   epg: (from, to) => getAll('epg/', { stop__gte: iso(from), start__lte: iso(to) }, 500),
   // Complete lineup incl. multicast-only channels, in Init7's channel order.
-  async m3u() {
-    const r = await fetch(M3U_URL);
-    if (!r.ok) throw new Error('HTTP ' + r.status);
-    return r.text();
-  },
+  m3u: () => getText(M3U_URL),
+  // Full HD versions of the SRG channels: { mc, hls } M3U texts, '' for a list that failed to load.
+  fhd: () =>
+    Promise.all(
+      [FHD_MC_URL, FHD_HLS_URL].map((url) =>
+        getText(url).catch((e) => {
+          console.warn('[init7tv] FHD list not available: ' + url, e);
+          return '';
+        }),
+      ),
+    ).then(([mc, hls]) => ({ mc, hls })),
 };

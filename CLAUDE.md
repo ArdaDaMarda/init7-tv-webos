@@ -22,8 +22,8 @@ npm run check     # lint + format check + unit tests (same as CI), run before ev
 npm test          # node --test, no TV needed
 npm run build     # bundle into build/ (app + service, manifests generated)
 npm run package   # build + dist/<appId>_<version>_all.ipk
-npm run dev       # dev build, package, install on the default TV and launch (needs a TV in Developer Mode;
-                  # on a rooted TV the install step may fail, see CONTRIBUTING.md → Rooted TVs)
+npm run dev       # dev build, package, install on the default TV and launch (Developer Mode or rooted TV;
+                  # on a rooted TV it falls back to an SSH install, see CONTRIBUTING.md → Rooted TVs)
 npm run inspect   # DevTools tunnel to the running app (takes ~30 s to print the URL)
 ```
 
@@ -53,6 +53,7 @@ The webOS CLI is a local dev dependency, so call it as `npx ares-*`, never as a 
 - **Track labels come from the multicast PMT** (`/info/<group>:<port>`). The special language codes (`mis`, `mul`, `und`, `zxx`, `nar`, `qaa`–`qtz`) are wildcards when matching, and are shown as the code rather than guessed.
 - **The app stays open for days** (TVs suspend apps instead of closing them). Anything loaded once goes stale: guide blocks are reloaded after 3 hours, the lineup every 6 hours. Keep that in mind for new cached data.
 - **The relay must not buffer without limit.** It writes the live stream without pausing the socket and drops a client at a 32 MB backlog.
+- **The player waits for ~5 s of video before it starts.** The relay keeps the current channel's last 6 s and sends them to each new connection at once (reload and audio switch ~0.5 s). It keeps only the current channel; joining more costs their bitrate on the network the whole time.
 - **EPG optional fields are often empty** (credits 19%, age rating 26%; year, pictures and star rating never). Show a detail only when it exists; see `docs/API.md` → EPG fields.
 - **UI changes are checked in desktop Chrome** with `tools/cdp.mjs` (see CONTRIBUTING.md → Testing without a TV), then once on the TV. Playback, audio and relay changes always need the TV.
 - **Remote:** the target is the LG AI Magic Remote. The TV grabs GUIDE, ♡ and AI, so don't rely on them. ◀ opens the guide, ▶ the menu, OK the channel list, and hold-OK toggles a favourite.

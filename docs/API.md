@@ -14,6 +14,11 @@ Base URL: `https://api.tv.init7.net/api/`. Lists use Django REST pagination
 | `GET epg/?stop__gte=<iso>&start__lte=<iso>&limit=500` | Programme guide, all channels | Optional `channel=<pk>`. Each entry: `pk`, `timeslot {lower, upper}`, `title`, `sub_title`, `desc`, `categories`, the [optional fields](#epg-fields) below, and a nested `channel` object (including its `src`) |
 | `GET live/?channel=<pk>` | HLS playlist | MPEG-TS segments of ~6 s. Returns **HTTP 410** for multicast-only channels |
 | `https://api.init7.net/tvchannels.m3u` | Full lineup (242) | `tvg-logo`, `tvg-name`, `group-title` (language), multicast URL |
+| `https://www.init7.net/files/srg-fhd-mc.m3u`, `…/srg-fhd-hls.m3u` | Full HD versions of SRF 1, SRF zwei, SRF info, RTS 1, RTS 2, RSI LA 1, RSI LA 2 | Not in the main lineup. Own multicast groups (e.g. SRF 1 FHD `233.50.230.1`, regular `.80`) and HLS on `vtvapi03.sys.init7.net`. HEVC 1920×1080 at 50 fps, ~27 Mbit/s; the regular versions are H.264 1280×720, ~5.7 Mbit/s. Same audio tracks. Matched to the regular channel by `tvg-name` (`SRF1.ch`); the lines have a stray `"` before `tvg-name` |
+
+Init7's HLS playlists (regular and FHD) are single media playlists: every segment carries all audio tracks, there
+are no separate audio renditions (`EXT-X-MEDIA`). `https://api.init7.net/tvchannels.xspf` has the same 242
+channels as the M3U, for VLC (with `network-caching=1000`).
 
 Not used: `replay/` (needs a replay entitlement), `chunk/`, `credit/`. `GET /api/` lists the endpoints.
 

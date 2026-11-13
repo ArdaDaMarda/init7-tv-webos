@@ -5,6 +5,31 @@ and versions follow [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Added
+
+- Full HD (1080p) for SRF 1, SRF zwei, SRF info, RTS 1, RTS 2, RSI LA 1 and RSI LA 2: the app plays Init7's Full HD
+  versions of these channels instead of the 720p ones. Number, name, guide and favourites stay the same.
+- "Reload stream" in the options menu (▶), for a stream that hangs. The chosen audio track is kept.
+
+### Changed
+
+- Reloading a multicast channel and switching its audio track take ~0.5 s instead of ~5 s. The relay keeps the
+  last 6 s of the current channel and sends them to a new connection at once; the TV's player waits for about 5 s
+  of video before it starts. Only the current channel is kept, for 10 s after it was last played. Starting a channel
+  still takes ~5 s, and so does the first audio switch on an HLS channel (the relay has to join it first).
+- The audio track list of the running multicast channel is read from the relay's buffer instead of joining the
+  channel a second time.
+- The relay accepts only multicast group addresses (224.0.0.0 – 239.255.255.255).
+- The relay's `/stats` lists the last 30 requests with the player's headers, the time to the first byte and the
+  bytes sent after 0.5 – 5 s, to find out where a slow start loses its time.
+- Docs: multicast channels take ~5 s to start, not ~1.4 s as stated before (HLS is ~0.6 s as stated).
+- `npm run dev` works on a rooted TV: if `ares-install` fails, the package is copied over SSH and installed through
+  the TV's installer service.
+
+### Fixed
+
+- The key hints under the channel list fit on one line again ("BACK Close" had wrapped onto a second line).
+
 ## [1.1.0] - 2026-11-13
 
 ### Added

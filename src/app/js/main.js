@@ -259,14 +259,15 @@ function startChannel() {
 }
 
 async function loadChannels() {
-  const [apiChannels, m3u] = await Promise.all([
+  const [apiChannels, m3u, fhd] = await Promise.all([
     api.channels(settings.get('langOrder', DEFAULT_LANG_ORDER)),
     api.m3u().catch((e) => {
       console.warn('[init7tv] M3U not available, showing HLS channels only', e);
       return '';
     }),
+    api.fhd(),
   ]);
-  const list = buildLineup(m3u, apiChannels);
+  const list = buildLineup(m3u, apiChannels, fhd);
   if (!list.length) throw new Error('empty channel list');
   channels.set(list);
   settings.set('lineup', list);
@@ -281,7 +282,7 @@ async function start() {
     tune(startChannel());
   }
 
-  // The guide data needs neither the authorization check nor the lineup, so all three load side by side.
+  // The guide data needs neither the authorisation check nor the lineup, so all three load side by side.
   const epgWindow = () => epg.ensure(Date.now() - 3600000, Date.now() + 6 * 3600000);
   epgWindow();
   const lineup = loadChannels();
@@ -292,7 +293,7 @@ async function start() {
     if (!auth.allowed) {
       player.stop();
       status.show(
-        `This connection (${auth.ip}) is not authorized for Init7 TV7.\nIt only works on an Init7 internet connection.`,
+        `This connection (${auth.ip}) is not authorised for Init7 TV7.\nIt only works on an Init7 internet connection.`,
       );
       return;
     }

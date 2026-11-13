@@ -11,13 +11,13 @@ Status of the project and open items.
 | EPG, banner, channel list, guide, options menu, hold-OK favourites | ✅ Verified on the TV with simulated key presses |
 | Restructured code (ES modules + esbuild), app id `io.github.ardadamarda.init7tv` | ✅ The v1.0.0 release `.ipk` from GitHub is installed on the TV; lineup, EPG, HLS and multicast via the relay verified |
 | Audio track list with broadcaster labels (relay `/info`) | ✅ Verified on the TV: Das Erste, arte D, SRF 1, ZDFneo |
-| Audio switching via the relay filter (`?audio=<pid>`) | ✅ In sync, verified by ear on Das Erste; switch ~1.5 s with a black screen |
+| Audio switching via the relay filter (`?audio=<pid>`) | ✅ In sync, verified by ear on Das Erste. Since the stream buffer: ~0.5 s (first switch on an HLS channel ~5 s), in sync by ear |
 | CI / release workflows | ✅ Running on GitHub; v1.0.0 and v1.1.0 released with the `.ipk` built by the release workflow |
 | v1.1.0: richer programme details in the guide and banner | ✅ Verified on the TV (2026-11-13) |
 | v1.1.0: fast zapping (only the channel you stop on is loaded) | ✅ Verified on the TV by hand (2026-11-13) |
 | v1.1.0: relay drops a client that stops reading (32 MB backlog) | ✅ Verified on the TV with a deliberately slow client: `/stats` → `dropped: 1` |
 | v1.1.0: guide data reloaded every 3 h; parallel start | ✅ Unit tests and desktop Chrome; not observed over days on the TV yet |
-| Rooted TV (Homebrew Channel) | ✅ The app runs on the rooted test TV. Installing needed a workaround, see [Contributing](../CONTRIBUTING.md#rooted-tvs) |
+| Rooted TV (Homebrew Channel) | ✅ The app runs on the rooted test TV; v1.1.0 installed through the TV's installer service over SSH, see [Contributing](../CONTRIBUTING.md#rooted-tvs) |
 
 ## Verification on a real TV
 
@@ -39,10 +39,40 @@ Status of the project and open items.
       English track at all.
 - [ ] No screensaver after ~15 min of playback
 - [ ] A multicast channel stays stable for 30+ min (e.g. 26 ZDFneo)
-- [ ] **Switching speed:** measure HLS vs multicast on the current version (automated over DevTools, ~30 s). A user
-      reported slower switching after multicast was added. The expected cause is that ▲▼ now also passes multicast
-      channels (~1.4 s vs ~0.6 s), plus the relay service start for the first multicast channel. HLS-to-HLS switching
-      should be unchanged; confirm it.
+- [x] **Switching speed** measured on the TV over DevTools (2026-11-13, about 15 min after the TV was switched on,
+      time from the switch to the `playing` event):
+      - HLS: 0.54 – 0.69 s in 8 switches, whether coming from HLS or multicast. Unchanged.
+      - Multicast: 4.8 – 5.6 s in 7 of 8 switches (ZDFneo, NITRO, ONE); one start of ONE played after 2.1 s, then
+        stalled until 5.1 s. **This is far above the ~1.4 s documented so far**, and it explains the report of
+        slower switching.
+      - Where the time goes: the app hands the relay URL to the player within 0.07 s, and the relay delivers the
+        first data within 0.02 – 0.12 s at full rate. The rest is the TV's player, which opens the relay stream twice
+        per start and reports `stalled` at 3.3 s before it plays.
+- [ ] **Multicast start takes ~5 s:** find out why. It was always like this; the ~1.4 s in earlier docs was wrong
+      (corrected in the README and decisions; the v1.0.0 changelog entry still says ~1.4 s).
+      Relay connection log (`/stats` → `connections`), 8 multicast starts on 2026-11-13:
+      - The "second open" is harmless: about 0.2 – 1 s after the player's stream connection, a request without a
+        user agent opens the stream and closes it after 1 – 14 ms (at most 20 KB). The player keeps playing from
+        the first connection.
+      - The player plays **~4.5 s after the first byte, whatever the bitrate**: ZDFneo (~1.4 MB/s) after ~6 MB,
+        NITRO (~0.3 MB/s) after ~1.5 MB. ONE gets `loadedmetadata` after ~1 s, then waits until ~4.5 s. So the
+        player seems to wait for a fixed amount of media time (or a fixed timeout), not for a byte count or a
+        keyframe. HLS fits this: a segment brings several seconds of media at once, and it starts in 0.6 s.
+      - The multicast join itself takes 0.15 s on ZDFneo but 0.8 – 1.0 s on NITRO and ONE (time to the first
+        byte).
+      - **Burst test (2026-11-13): the player waits for ~4.5 – 5 s of video, and starts ~0.5 s after it has
+        them.** With a temporary relay option, the first part of the stream was held back and then sent in one
+        burst. After 5 s of data in one burst, ZDFneo, NITRO and ONE played 0.3 – 0.5 s later. After 8 s,
+        ZDFneo played 0.6 s later. After only 2.5 s, the player still waited another 2.2 – 3.0 s. The burst
+        began at a random point in the stream, not at a keyframe.
+      - The probe must be answered at once: it comes right after the first data on the stream connection, and
+        the player doesn't start until it is answered.
+      - **Consequence:** a relay that already holds the last ~5 s of a channel can start it in ~0.5 s, like
+        HLS. Done for the current channel (see "Stream buffer" under Improvements); a fresh channel start still
+        takes ~5 s.
+- [x] **Full HD SRG channels** (HEVC 1080p50, ~27 Mbit/s), verified on the TV (2026-11-13): SRF 1, SRF zwei and
+      RTS 1 play in 1920×1080 and start in 0.6 – 0.7 s over HLS, like the 720p versions. Audio switch on SRF 1:
+      first 4.5 s (the relay joins the FHD group), then 0.65 s with a 20 MB burst; nothing dropped.
 - [ ] Guide refresh over a long session: leave the app open for a day and check that the guide follows schedule
       changes (the 3-hour reload is only covered by unit tests so far)
 - [ ] Does any channel's PMT span two UDP datagrams? In that case the audio filter passes the original PMT through
@@ -66,7 +96,8 @@ Status of the project and open items.
 ## Improvements
 
 - [ ] **Seamless audio switching (PID remapping in the relay).** Since 2026-10-21 a non-default audio track is
-      delivered alone by the relay (`?audio=<pid>`). That stays in sync but needs a reload: a black screen of ~1.5 s.
+      delivered alone by the relay (`?audio=<pid>`). That stays in sync but needs a reload: ~0.5 s with the stream buffer (~5 s for the first switch on an HLS
+      channel).
       Idea: keep the player's relay connection open. The output always carries one audio stream under a fixed PID, and
       on a switch the relay starts forwarding the chosen source track's packets under that PID, beginning at a PES
       start. No reload, no pipeline track switch; all tracks share the PCR/PTS clock, so sync should hold. Expected
@@ -75,11 +106,18 @@ Status of the project and open items.
       - Needs playback through the relay (multicast), plus a control call to the relay to change the PID of a running
         stream (per connection id).
       - To verify: the decoder accepts the switch (bitrate change e.g. 256 → 192 kbit/s), and A/V sync by ear.
-- [ ] **Keyframe (GOP) cache in the relay ("fast channel change").** The relay keeps the running channel's multicast
-      group joined and buffers from the last keyframe. A new request first gets PAT/PMT and the cached data, so the
-      player doesn't wait 1–2 s for the next keyframe. This shortens audio-track reloads and multicast channel switches.
-      Extension: pre-join the neighbouring channels (▲/▼) for near-instant zapping. This works on the TV; a relay on
-      the router would not be faster.
+- [x] **Stream buffer in the relay, current channel** (2026-11-13). The burst test (see "Multicast start" under
+      Verification) showed that the player starts ~0.5 s after it has ~5 s of video. The relay now joins each
+      channel once for all its connections, keeps the last 6 s (at most 24 MB; ~11 MB for ZDFneo in HD, ~20 MB for the Full HD SRG channels) and sends
+      them to a new connection in one burst. A channel stays joined for 10 s after its last connection, unless
+      another channel is already playing. Playback runs ~6 s behind live, like with HLS. Measured on the TV:
+      reload ZDFneo 0.52 / 0.54 s, NITRO 0.33 s; audio switch ZDFneo 0.66 / 0.55 s, Das Erste 0.63 s (its first
+      switch 5.3 s, because the HLS channel is not joined yet). Only one channel was joined at a time.
+      - [x] A/V sync after an audio switch with the buffer: in sync, checked by ear (2026-11-13).
+- [ ] **Stream buffer for channel switches ("fast channel change").** A channel switch is fast only if the relay
+      is already on the target channel: join the neighbours (▲/▼) and the previous channel in advance. Each joined
+      channel costs its bitrate on the network the whole time (an HD channel ~11 Mbit/s) and up to 24 MB of memory.
+      This works on the TV; a relay on the router would not be faster.
 - [x] **Audio track labels** (2026-10-21): the relay reads the multicast PMT (`/info/<group>:<port>`), the menu shows
       an audio track list with language, purpose and codec. Verified on Das Erste, arte, SRF 1, ZDFneo.
 - [ ] **Subtitles:** the multicast streams carry DVB teletext and teletext subtitles (e.g. Das Erste); HLS probably
@@ -94,21 +132,23 @@ Status of the project and open items.
 - [x] **Guide refresh** (2026-11-13): a 6-hour block is reloaded after 3 hours unless it lies in the past.
 - [ ] Channel list: render only the visible rows. It builds all 242 rows and logos at once and rebuilds them when
       EPG data arrives. Fine on a G5; likely to matter on older TVs.
-- [ ] Channel list: show favourites first in the "All" tab (as the official app does), in addition to the ★ tab
-- [ ] "Reload stream" entry in the options menu, for a stream that hangs (the official app has this on the red key)
+- [x] "Reload stream" entry in the options menu, for a stream that hangs (the official app has this on the red key).
+      Added after v1.1.0; verified on the TV on a multicast channel (2026-11-13).
 - [ ] Debug overlay with codec and stream info (the official app has a "Show debug information" setting)
 - [ ] Mock mode for development: recorded API responses, so the UI can be worked on and tested in CI off the Init7
       network. The LG webOS simulator was considered and rejected, see [decisions](DECISIONS.md).
 - [ ] Map ♡ to "favourite" on remote variants that have it, if the button reaches the app
 - [ ] UI languages DE / FR / IT / EN (currently English, dates de-CH)
 - [ ] Settings screen: language order, hide channel groups from zapping, default audio language
-- [ ] Relay hardening: accept only multicast addresses, limit concurrent clients, fall back to another port if 8077 is
-      busy. Done so far (2026-11-13): a client that stops reading is dropped at a 32 MB backlog.
+- [ ] Relay hardening: limit concurrent clients, fall back to another port if 8077 is busy. Done so far
+      (2026-11-13): a client that stops reading is dropped at a 32 MB backlog, and only multicast group addresses
+      are accepted (verified on the TV: unicast, loopback and broadcast targets get a 404).
 - [ ] Debug features (`keyLog`, `/stats`) only behind a debug flag
 - [ ] Automate or document the Developer Mode session renewal (not needed on a rooted TV)
 - [ ] Publish to the webOS Homebrew Channel repository (for rooted TVs). The app already runs on a rooted G5.
-- [ ] Make `npm run dev` work on a rooted TV: `ares-install` over the root SSH login failed there with "Unable to
-      exec", and the TV's installer service did not always answer
+- [x] Make `npm run dev` work on a rooted TV (2026-11-13): `ares-install` over the root SSH login fails there
+      ("Unable to exec"), so `scripts/deploy.mjs` falls back to copying the `.ipk` over SSH and calling the installer
+      service (`luna-send … < /dev/null`). Verified on the rooted G5 with `npm run dev` and `npm run deploy`.
 - [ ] Replay, for accounts with a replay entitlement (`replay_grant`); not testable with the current account. How
       the official app does it is written down in [API notes](API.md#replay).
 

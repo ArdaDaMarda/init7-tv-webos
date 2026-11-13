@@ -37,6 +37,14 @@ function mainItems() {
     },
     { html: 'Programme details', close: true, act: () => banner.show(ch, { expanded: true }) },
     { html: 'TV guide', close: true, act: () => guide.show() },
+    {
+      html: 'Reload stream',
+      close: true,
+      act() {
+        player.reload();
+        actions.toast('Reloading stream…');
+      },
+    },
   ];
 }
 

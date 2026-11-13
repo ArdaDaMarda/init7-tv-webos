@@ -4,25 +4,32 @@ An unofficial LG webOS TV app for **Init7 TV7**, the IPTV service included with 
 Init7 ships official apps only for Google TV and Apple TV. This app brings TV7 to LG TVs, natively and with
 a programme guide.
 
-![Info banner](docs/screenshots/banner.png)
+![Info banner with programme details](docs/screenshots/banner.png)
 
 | Channel list with filters | Programme guide |
 |---|---|
 | ![Channel list](docs/screenshots/channel-list.png) | ![Programme guide](docs/screenshots/guide.png) |
 
+<img src="docs/screenshots/audio-tracks.png" alt="Audio track list on Das Erste, with audio description, clean audio and Dolby Digital" width="404">
+
+*The audio track list on Das Erste, as shown on the TV.*
+
 ## Features
 
 - **All 242 Init7 channels**: 102 via HLS, plus 140 multicast-only channels through a small relay that runs on the
   TV itself. No extra device and no router changes are needed.
-- **Fast switching**: ~0.6 s on HLS channels, ~1.4 s on multicast channels. When you zap quickly through several
-  channels, only the one you stop on is loaded.
+- **Fast switching** on the 102 HLS channels (~0.6 s). Multicast channels take ~5 s to start; after that, reloading
+  them or switching their audio track takes ~0.5 s. When you zap quickly through several channels, only the one you
+  stop on is loaded.
+- **Full HD** for the SRG channels SRF 1, SRF zwei, SRF info, RTS 1, RTS 2, RSI LA 1 and RSI LA 2 (Init7 offers
+  them in 1080p on a separate list; the app uses it automatically)
 - **Programme guide** for 241 channels: info banner with now/next, and a guide grid with live picture-in-picture
 - **Programme details** where the broadcaster provides them: episode title, genre, duration, season and episode,
   country, age rating, host, cast and director
 - **Channel list** with logos, what's on now, favourites and filters (All / ★ / DE / FR / IT / EN / World)
 - **Audio track list** with the broadcaster's descriptions, e.g. "Deutsch · Audio description", "Deutsch · Clean
   audio", "Dolby Digital 5.1", read live from the multicast stream. Switching stays in A/V sync (the relay delivers
-  the chosen track alone; this takes ~1.5 s). The language is remembered across channels.
+  the chosen track alone). It takes ~0.5 s, except for the first switch on an HLS channel (~5 s). The language is remembered across channels.
   The tracks are what the broadcaster sends: e.g. SRF's "English" track only carries English for foreign productions,
   while arte always offers German and French.
 - Channel number entry, resumes the last channel on start
@@ -78,7 +85,7 @@ be used: on webOS 25 the TV catches it and opens its own guide, so the app's gui
 | ▲ ▼ · CH ∧∨ · wheel | Switch channel | Move (CH = page) | Channel (CH = page) |
 | OK | Channel list | Watch · **hold = favourite** | Watch (if on now) |
 | ◀ | Programme guide | Previous filter | Earlier programme |
-| ▶ | Options: audio track list · favourite · details · guide | Next filter | Later programme |
+| ▶ | Options: audio track list · favourite · details · guide · reload stream | Next filter | Later programme |
 | 123 → digits (→ OK) | Channel by number; OK on the keypad switches immediately | | |
 | BACK | Hide banner · press twice to exit | Close | Close |
 

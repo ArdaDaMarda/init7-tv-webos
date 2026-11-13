@@ -340,8 +340,11 @@ body.guide-open #video {
 }
 #chlist .hints {
   padding-top: 20px;
-  gap: 24px;
-  flex-wrap: wrap;
+  gap: 14px;
+  white-space: nowrap;
+}
+#chlist .hints .key {
+  margin-right: 7px;
 }
 
 /* ---- Guide ---- */

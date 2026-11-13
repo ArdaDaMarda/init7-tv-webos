@@ -12,6 +12,10 @@ function payload(buf) {
 function parseUdpPath(url, prefix = 'udp') {
   const m = new RegExp('^/' + prefix + '/(\\d{1,3}(?:\\.\\d{1,3}){3}):(\\d{1,5})(?:[/?]|$)').exec(url || '');
   if (!m) return null;
+  // Only IPv4 multicast groups (224.0.0.0 - 239.255.255.255), so the relay can't be pointed at a
+  // unicast or broadcast address.
+  const octets = m[1].split('.').map(Number);
+  if (octets[0] < 224 || octets[0] > 239 || octets.some((o) => o > 255)) return null;
   const port = Number(m[2]);
   return port > 0 && port < 65536 ? { group: m[1], port } : null;
 }
@@ -200,4 +204,40 @@ function backlog(res) {
   return (res.socket && res.socket.bufferSize) || 0;
 }
 
-module.exports = { backlog, payload, parseUdpPath, parsePmt, crc32, rewritePmt, createAudioFilter };
+// The last `maxMs` of a live stream, at most `maxBytes`, as the chunks it arrived in. The webOS player
+// starts about 0.5 s after it has ~5 s of video, so a new client that gets this buffer in one burst
+// starts almost at once instead of waiting ~5 s for the video to arrive live.
+function createStreamBuffer(maxMs, maxBytes) {
+  let chunks = []; // { t, data }, oldest first; entries before `start` are already dropped
+  let start = 0;
+  let bytes = 0;
+  return {
+    push(data, now) {
+      chunks.push({ t: now, data });
+      bytes += data.length;
+      while (start < chunks.length - 1 && (now - chunks[start].t > maxMs || bytes > maxBytes)) {
+        bytes -= chunks[start].data.length;
+        start++;
+      }
+      if (start > 1024) {
+        chunks = chunks.slice(start);
+        start = 0;
+      }
+    },
+    chunks: () => chunks.slice(start).map((c) => c.data),
+    bytes: () => bytes,
+    // Time span covered, from the oldest to the newest chunk.
+    ms: () => (chunks.length > start ? chunks[chunks.length - 1].t - chunks[start].t : 0),
+  };
+}
+
+module.exports = {
+  backlog,
+  payload,
+  parseUdpPath,
+  parsePmt,
+  crc32,
+  rewritePmt,
+  createAudioFilter,
+  createStreamBuffer,
+};

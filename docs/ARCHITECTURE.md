@@ -22,7 +22,9 @@
    waits for another.
 2. **Lineup** (`channels.js` → `buildLineup`): the Init7 M3U provides all 242 channels in official order with logos and
    language groups. The channel API provides HLS URLs for 102 of them. They are joined by **multicast address**, which
-   is also the channel id everywhere in the app (favourites, last channel, EPG).
+   is also the channel id everywhere in the app (favourites, last channel, EPG). Init7's two Full HD lists replace
+   the HLS URL and the multicast stream (`stream`, see `streamId`) of 7 SRG channels; their id stays the regular
+   channel's, so the guide and favourites are unchanged.
 3. **EPG** (`epg.js`): programmes for *all* channels are loaded in 6-hour blocks (`/api/epg/?stop__gte&start__lte`,
    about 6 pages of 500 entries per block). Blocks load on demand around "now" and wherever the guide scrolls, and a
    block that is not yet in the past is reloaded after 3 hours, so schedule changes arrive while the app stays open.
@@ -32,17 +34,20 @@
    exponential backoff on errors. When channel-switch presses follow each other within 400 ms (`zap` in `main.js`),
    only the banner follows and the stream starts 250 ms after the last press.
 5. **Relay** (`relay.js` ↔ `src/service/service.js`): the app opens a Luna subscription to `<appId>.relay/start`,
-   which starts the HTTP server and keeps the service alive while the app runs. Each HTTP request joins one multicast
-   group and streams its UDP payload (raw MPEG-TS; RTP headers would be stripped) to the player. Closing the request
-   leaves the group. A client that stops reading is dropped once 32 MB are unread, so the relay cannot fill the
-   TV's memory. Endpoints:
+   which starts the HTTP server and keeps the service alive while the app runs. The relay joins a channel's
+   multicast group once and streams its UDP payload (raw MPEG-TS; RTP headers would be stripped) to every request
+   for it. It keeps the last 6 s (at most 24 MB, enough for a Full HD channel, `createStreamBuffer` in `relay-core.js`) and sends them to a new
+   request in one burst: the player starts ~0.5 s after it has ~5 s of video, so a reload or an audio switch is
+   fast. After the last request closes, the channel stays joined for 10 s, unless another channel is already
+   playing. A client that stops reading is dropped once 32 MB are unread, so the relay cannot fill the TV's memory.
+   Endpoints:
    - `/udp/<group>:<port>`: the stream as is
    - `/udp/<group>:<port>?audio=<pid>`: the stream with **only this audio track**. The PMT is rewritten with a new
      CRC and the other audio PIDs are dropped (`createAudioFilter` in `relay-core.js`).
    - `/info/<group>:<port>`: the audio tracks from the PMT, as JSON (see 6)
-   - `/stats`: counters for debugging
-6. **Audio track labels** (`tracks.js` ↔ relay `/info/<group>:<port>`): after a channel starts, the relay joins its
-   multicast group for a moment and parses the PMT: language, purpose (audio description, clean audio) and codec of
+   - `/stats`: counters, the joined channels and a log of the last 30 requests, for debugging
+6. **Audio track labels** (`tracks.js` ↔ relay `/info/<group>:<port>`): after a channel starts, the relay parses
+   the PMT from its buffer (or, for an HLS channel, joins the multicast group for a moment): language, purpose (audio description, clean audio) and codec of
    each audio stream. The labels are used if they line up with the tracks the player reports. HLS is a remux of the
    same stream with relabelled languages, so special codes like `mis`/`qks` are treated as wildcards. Results are cached
    for 30 minutes per channel.

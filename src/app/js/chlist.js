@@ -26,7 +26,7 @@ root.innerHTML = `
   <div class="cl-view"><div class="cl-items"></div></div>
   <div class="hints">
     <span><i class="key">OK</i>Watch</span>
-    <span><i class="key">Hold OK</i>Favourite</span>
+    <span><i class="key">Hold OK</i>★</span>
     <span><i class="key">CH ∧∨</i>Page</span>
     <span><i class="key">◀▶</i>Filter</span>
     <span><i class="key">BACK</i>Close</span>

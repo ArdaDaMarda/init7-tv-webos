@@ -33,8 +33,9 @@ How the app came to be, and why it is built the way it is. Each finding was veri
    switching faster: the delay comes from the IGMP join, waiting for a keyframe and the player's buffer, and those are
    the same on either device.
 
-7. **HLS where available.** It starts in ~0.6 s versus ~1.4 s for multicast (about 2.5–5 s for the first multicast
-   channel after app start, while the relay service starts).
+7. **HLS where available.** It starts in ~0.6 s versus ~5 s for multicast (measured on the TV on 2026-11-13;
+   the ~1.4 s stated earlier was wrong). The multicast delay is in the TV's player, not in the relay: see the
+   [roadmap](ROADMAP.md#verification-on-a-real-tv).
 
 8. **Lineup from the M3U, ids = multicast addresses.** That address is the only key shared by the M3U, the channel API
    and the EPG. Channel numbers follow Init7's M3U order (e.g. 26 = ZDFneo, 58 = Phoenix).
@@ -49,7 +50,7 @@ How the app came to be, and why it is built the way it is. Each finding was veri
     `video.audioTracks` or LG's `luna://com.webos.media/selectTrack`, during playback or right after the start, led
     to silence and lost A/V sync. Instead, the relay delivers the multicast stream with only the chosen audio track
     (PMT rewritten, other audio PIDs dropped), and the player plays it as its default. This is in sync but costs a
-    reload (~1.5 s); see the roadmap for faster options. LG's `selectTrack` remains only as a fallback when the track
+    reload: ~0.5 s from the relay's buffer (see 20), ~5 s for the first switch on an HLS channel. LG's `selectTrack` remains only as a fallback when the track
     PIDs are unknown.
     Note that the track labels are the broadcaster's: SRF's `eng` track carries English only for foreign productions
     and repeats the German sound otherwise. Das Erste and ZDF only have German variants (stereo, audio description,
@@ -96,3 +97,11 @@ How the app came to be, and why it is built the way it is. Each finding was veri
 19. **Dependabot alerts from the webOS CLI are dismissed, not fixed.** LG's `@webos-tools/cli` pins its whole
     dependency tree with an `npm-shrinkwrap.json`, so `npm audit fix` and npm `overrides` have no effect. The
     affected packages only run at build time and nothing from `node_modules` is shipped in the `.ipk`.
+
+20. **The relay keeps a few seconds of the current channel, and only that one.** The player starts ~0.5 s after
+    it has about 5 s of video; on a live multicast stream those 5 s take 5 s to arrive. HLS starts fast because a
+    segment brings them at once. A test on the TV (2026-11-13) held the stream back and sent it in one burst: the
+    player started 0.3 – 0.6 s after the burst. So the relay buffers the last 6 s of the channel it plays and sends
+    them first to every new connection, which makes reloads and audio switches ~0.5 s (playback runs ~6 s behind
+    live). Joining the neighbouring channels in advance would make channel switches fast as well, but costs each
+    channel's bitrate on the network the whole time, so it was left out for now.

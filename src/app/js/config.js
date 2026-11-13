@@ -9,4 +9,7 @@ export const RELAY_SERVICE = APP_ID + '.relay';
 
 export const API_BASE = 'https://api.tv.init7.net/api/';
 export const M3U_URL = 'https://api.init7.net/tvchannels.m3u';
+// Full HD (1080p, HEVC) versions of 7 SRG channels, which replace the 720p ones in the lineup.
+export const FHD_MC_URL = 'https://www.init7.net/files/srg-fhd-mc.m3u';
+export const FHD_HLS_URL = 'https://www.init7.net/files/srg-fhd-hls.m3u';
 export const DEFAULT_LANG_ORDER = 'de';
