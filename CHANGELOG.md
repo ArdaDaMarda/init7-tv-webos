@@ -16,7 +16,10 @@ and versions follow [Semantic Versioning](https://semver.org/).
 - Reloading a multicast channel and switching its audio track take ~0.5 s instead of ~5 s. The relay keeps the
   last 6 s of the current channel and sends them to a new connection at once; the TV's player waits for about 5 s
   of video before it starts. Only the current channel is kept, for 10 s after it was last played. Starting a channel
-  still takes ~5 s, and so does the first audio switch on an HLS channel (the relay has to join it first).
+  still takes ~5 s.
+- Switching the audio track on an HLS channel takes ~1.5 – 2 s every time (~2 – 3 s on the Full HD channels). Before,
+  the first switch on a channel took ~5 s and the later ones ~0.6 s. The relay now fetches Init7's HLS segments itself, keeps only the chosen track and passes them to the
+  player, instead of joining the channel's multicast stream. After a switch, playback runs ~12 – 18 s behind live.
 - The audio track list of the running multicast channel is read from the relay's buffer instead of joining the
   channel a second time.
 - The relay accepts only multicast group addresses (224.0.0.0 – 239.255.255.255).
@@ -28,6 +31,10 @@ and versions follow [Semantic Versioning](https://semver.org/).
 
 ### Fixed
 
+- An audio track the relay can't deliver no longer leaves the channel retrying for good. After two failed starts
+  the channel plays its default track and a note says so; choosing the track again tries it once more.
+- A request to Init7's API that never answers is given up after 15 s. Before, it could leave a part of the guide
+  without updates until the app was restarted.
 - The key hints under the channel list fit on one line again ("BACK Close" had wrapped onto a second line).
 
 ## [1.1.0] - 2026-11-13

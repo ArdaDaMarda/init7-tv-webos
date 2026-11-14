@@ -41,6 +41,8 @@ The webOS CLI is a local dev dependency, so call it as `npx ares-*`, never as a 
   - The app id, title and version come from `package.json` (`webos`, `version`).
   - Nothing else hard-codes the app id. At build time it is `__APP_ID__`; in the app it comes from `config.js`.
 - `test/`: unit tests for the pure logic. Keep DOM-free logic in testable modules.
+  - `service-hls.test.mjs` runs the real relay service with `webos-service` and `https.get` stubbed (it listens on port 8077).
+  - `player.test.mjs` runs `player.js` against a fake `<video>` element.
 - `tools/`: debugging helpers (`cdp.mjs`, `audio-compare.mjs`, …); see `tools/README.md`.
   - `tools/probe/` is a separate throwaway app and is not linted or formatted.
 
@@ -49,7 +51,9 @@ The webOS CLI is a local dev dependency, so call it as `npx ares-*`, never as a 
 - **Streams need the native `<video>`.** Streams are DVB passthrough (MPEG-2/H.264 video, MP2/AC-3 audio), which hls.js and MSE can't play.
 - **The bundle targets `chrome68`.** It must keep running on older webOS. Don't add runtime dependencies or a UI framework.
 - **Multicast-only channels need the relay.** About 140 of the 242 channels can't be played by the web engine (it can't open `udp://`) and go through `http://127.0.0.1:8077/udp/<group>:<port>`.
-- **Never switch audio tracks inside the webOS player.** Using `audioTracks[i].enabled` or a live `selectTrack` desyncs or stalls the pipeline. Instead, reload the stream through the relay with `?audio=<pid>`, which filters the other audio PIDs and rewrites the PMT. LG `selectTrack` is only a fallback.
+- **Never switch audio tracks inside the webOS player.** Using `audioTracks[i].enabled` or a live `selectTrack` desyncs or stalls the pipeline. On HLS, even a carefully timed `selectTrack` froze the picture for 8 – 12 s (re-tested 2026-11-14, decision 10). Instead, reload the stream through the relay, which filters the other audio PIDs and rewrites the PMT: `/hls?track=<n>` for an HLS channel (the relay fetches Init7's segments), `/udp/…?audio=<pid>` for a multicast-only channel. LG `selectTrack` is only a fallback.
+- **The HLS relay stream starts with two segments.** Init7 publishes segments unevenly (sometimes 10 s apart); with one segment the player froze for 6 s. The relay fetches only from `*.init7.net`. Fetching the two segments side by side was measured slower (decision 21).
+- **A single-track relay stream that fails twice falls back to the default track** (`filterGaveUp` in `player.js`). Keep that path when changing the retry logic, or a missing track retries for good.
 - **Track labels come from the multicast PMT** (`/info/<group>:<port>`). The special language codes (`mis`, `mul`, `und`, `zxx`, `nar`, `qaa`–`qtz`) are wildcards when matching, and are shown as the code rather than guessed.
 - **The app stays open for days** (TVs suspend apps instead of closing them). Anything loaded once goes stale: guide blocks are reloaded after 3 hours, the lineup every 6 hours. Keep that in mind for new cached data.
 - **The relay must not buffer without limit.** It writes the live stream without pausing the socket and drops a client at a 32 MB backlog.

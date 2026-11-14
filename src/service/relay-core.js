@@ -20,6 +20,62 @@ function parseUdpPath(url, prefix = 'udp') {
   return port > 0 && port < 65536 ? { group: m[1], port } : null;
 }
 
+// Init7's HLS comes from *.init7.net over HTTPS (playlists from the API hosts, segments from
+// *.cache.tv.init7.net). Nothing else is fetched, so the relay can't be used to reach other hosts.
+function allowedHlsUrl(url) {
+  const m = /^https:\/\/([a-z0-9.-]+)(?::443)?(?:[/?#]|$)/i.exec(url || '');
+  return !!m && /(^|\.)init7\.net$/i.test(m[1]);
+}
+
+// "/hls?track=<n>&url=<encoded playlist URL>" -> { url, track }, otherwise null. `track` is the index of
+// the audio track to keep, in PMT order (0 = all tracks, unfiltered).
+function parseHlsPath(reqUrl) {
+  const m = /^\/hls\?(.*)$/.exec(reqUrl || '');
+  if (!m) return null;
+  const params = {};
+  for (const part of m[1].split('&')) {
+    const eq = part.indexOf('=');
+    if (eq > 0) params[part.slice(0, eq)] = part.slice(eq + 1);
+  }
+  let url;
+  try {
+    url = decodeURIComponent(params.url || '');
+  } catch (e) {
+    return null;
+  }
+  const track = params.track === undefined ? '0' : params.track;
+  if (!allowedHlsUrl(url) || !/^\d{1,2}$/.test(track)) return null;
+  return { url, track: Number(track) };
+}
+
+// Absolute segment URLs of a media playlist, oldest first. Segments on other hosts are left out.
+function parsePlaylist(text, baseUrl) {
+  const { URL } = require('url');
+  const out = [];
+  for (const raw of String(text).split('\n')) {
+    const line = raw.trim();
+    if (!line || line[0] === '#') continue;
+    try {
+      const url = new URL(line, baseUrl).href;
+      if (allowedHlsUrl(url)) out.push(url);
+    } catch (e) {
+      // not a URL
+    }
+  }
+  return out;
+}
+
+// Which segments of a freshly loaded playlist to send. `seen` holds the URLs already handled and is
+// updated; the first call (`seen` empty) starts with the newest `startCount` segments.
+function newSegments(urls, seen, startCount) {
+  if (!seen.size) urls.slice(0, Math.max(0, urls.length - startCount)).forEach((u) => seen.add(u));
+  const todo = urls.filter((u) => !seen.has(u));
+  // Forget segments that left the playlist, so the set stays small over days.
+  for (const u of Array.from(seen)) if (!urls.includes(u)) seen.delete(u);
+  todo.forEach((u) => seen.add(u));
+  return todo;
+}
+
 const AUDIO_STREAM_TYPES = { 0x03: 'MP2', 0x04: 'MP2', 0x0f: 'AAC', 0x11: 'AAC', 0x81: 'AC-3', 0x87: 'E-AC-3' };
 const AC3_CHANNELS = ['mono', 'dual mono', 'stereo', 'stereo', '5.1', '5.1', null, null];
 const AC3_SERVICE = [null, 'music-effects', 'description', 'clear', null, null, null, null];
@@ -235,6 +291,10 @@ module.exports = {
   backlog,
   payload,
   parseUdpPath,
+  allowedHlsUrl,
+  parseHlsPath,
+  parsePlaylist,
+  newSegments,
   parsePmt,
   crc32,
   rewritePmt,

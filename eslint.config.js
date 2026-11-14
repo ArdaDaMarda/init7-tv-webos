@@ -22,7 +22,12 @@ export default [
     languageOptions: { sourceType: 'commonjs', globals: globals.node },
   },
   {
-    files: ['scripts/**', 'test/**', 'tools/*.mjs', '*.js'],
+    files: ['scripts/**', 'test/**', 'tools/**/*.mjs', '*.js'],
     languageOptions: { globals: globals.node },
+  },
+  {
+    // evaluated inside the app over DevTools (tools/avsync/README.md)
+    files: ['tools/avsync/run.js'],
+    languageOptions: { sourceType: 'script', globals: globals.browser },
   },
 ];

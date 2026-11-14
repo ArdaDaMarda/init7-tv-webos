@@ -29,7 +29,8 @@ a programme guide.
 - **Channel list** with logos, what's on now, favourites and filters (All / ★ / DE / FR / IT / EN / World)
 - **Audio track list** with the broadcaster's descriptions, e.g. "Deutsch · Audio description", "Deutsch · Clean
   audio", "Dolby Digital 5.1", read live from the multicast stream. Switching stays in A/V sync (the relay delivers
-  the chosen track alone). It takes ~0.5 s, except for the first switch on an HLS channel (~5 s). The language is remembered across channels.
+  the chosen track alone). It takes ~0.5 s on a multicast channel and ~1.5 – 2 s on an HLS channel. The language is remembered across channels;
+  if a track can't be played, the channel falls back to its default track.
   The tracks are what the broadcaster sends: e.g. SRF's "English" track only carries English for foreign productions,
   while arte always offers German and French.
 - Channel number entry, resumes the last channel on start

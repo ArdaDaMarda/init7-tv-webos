@@ -46,5 +46,8 @@ export const relay = {
   ready,
   // With `audioPid`, the relay delivers only that audio track (no track switching in the player).
   url: (group, audioPid) => 'http://127.0.0.1:' + port + '/udp/' + group + (audioPid ? '?audio=' + audioPid : ''),
+  // An HLS channel with only audio track `track` (index in the stream), fetched and filtered by the relay.
+  hlsUrl: (playlist, track) =>
+    'http://127.0.0.1:' + port + '/hls?track=' + track + '&url=' + encodeURIComponent(playlist),
   infoUrl: (group) => 'http://127.0.0.1:' + port + '/info/' + group,
 };

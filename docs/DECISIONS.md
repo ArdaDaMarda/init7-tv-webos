@@ -50,8 +50,19 @@ How the app came to be, and why it is built the way it is. Each finding was veri
     `video.audioTracks` or LG's `luna://com.webos.media/selectTrack`, during playback or right after the start, led
     to silence and lost A/V sync. Instead, the relay delivers the multicast stream with only the chosen audio track
     (PMT rewritten, other audio PIDs dropped), and the player plays it as its default. This is in sync but costs a
-    reload: ~0.5 s from the relay's buffer (see 20), ~5 s for the first switch on an HLS channel. LG's `selectTrack` remains only as a fallback when the track
-    PIDs are unknown.
+    reload: ~0.5 s from the relay's buffer (see 20). For HLS channels the relay filters Init7's HLS segments instead
+    (see 21). LG's `selectTrack` remains only as a fallback when a multicast-only channel's track PIDs are unknown.
+    **Re-tested 2026-11-14 with the precautions other webOS players use** (a valid `mediaId`, at least 3 s of running
+    playback, one awaited call at a time), using `tools/avsync/`:
+    - On a synthetic MPEG-TS stream played through the relay, `selectTrack` stayed in sync. Median offsets were within
+      ±20 ms of the reference, both for MP2 → MP2 (seamless) and for MP2 ↔ AC-3 (under 2 s of silence, no freeze).
+      AC-3 runs ~20 ms later than MP2 with the relay reload too, so that delay comes from the TV's decoder.
+    - On Init7's **HLS**, every real switch froze the picture: SRF 1 (AC-3 → AC-3) for ~8 s, and Das Erste (MP2 →
+      MP2) for ~12 s, twice. This held on both HLS servers and even when the codec stayed the same. The app's stall
+      watchdog then reloads the stream, and the track choice is lost.
+    - So `selectTrack` is unusable on HLS. On relay streams it works, but gains nothing over the ~0.5 s reload
+      except that the picture keeps running. The relay reload stays the only switching method; the faster first switch
+      on HLS channels came from the relay (see 21).
     Note that the track labels are the broadcaster's: SRF's `eng` track carries English only for foreign productions
     and repeats the German sound otherwise. Das Erste and ZDF only have German variants (stereo, audio description,
     clean audio, Dolby), while arte has German and French. Init7's HLS strips the descriptors that name these
@@ -105,3 +116,35 @@ How the app came to be, and why it is built the way it is. Each finding was veri
     them first to every new connection, which makes reloads and audio switches ~0.5 s (playback runs ~6 s behind
     live). Joining the neighbouring channels in advance would make channel switches fast as well, but costs each
     channel's bitrate on the network the whole time, so it was left out for now.
+
+21. **For another audio track on an HLS channel, the relay filters Init7's HLS segments.** Until 2026-11-14 the
+    relay joined the channel's multicast stream for this, so the first switch took ~5 s (the player waits for ~5 s
+    of video, see 20). Init7's HLS segments are plain, unencrypted MPEG-TS of ~6 s that carry all audio tracks, so
+    the relay's audio filter works on them unchanged. The relay polls the playlist, fetches each new segment,
+    filters it and writes it to the player as one endless stream (`/hls?track=<n>&url=<playlist>`). A segment
+    brings several seconds at once, so no buffer has to be kept in advance.
+    - **Measured on the TV (2026-11-14):** a switch takes 1.3 – 1.8 s on Das Erste and 2.1 – 3 s on the Full HD SRF
+      channels, every time. Before, the first switch on a channel took ~5 s and later ones ~0.6 s. A prototype
+      that ran on a PC reached ~0.6 s; on the TV the relay needs 0.3 – 0.6 s to download and filter the first
+      segment (~1 s for Full HD), and the player about another second. No freezes in ~8 minutes of filtered
+      playback, and "Reload stream" and the remembered language keep the track.
+    - The player opens every stream a second time as a probe and waits for its answer. Fetched playlists and
+      segments are therefore shared between connections for a moment (3 s for segments); without that the probe
+      downloaded the segments again and a switch took 2.2 – 4 s.
+    - Tried and dropped: fetching the next segment only after the player has taken the previous one. No gain, and
+      one switch took 3.8 s.
+    - Tried and dropped: downloading the two start segments side by side. It was slower in an A/B test on the
+      TV (six switches each, medians): Das Erste 1.7 s instead of 1.4 s, SRF 1 (Full HD) 3.1 s instead of
+      2.1 s. The player starts on the first segment, and the second download slows the first one down.
+    - A segment that fails to download is tried once more after 0.3 s and skipped only then. If the stream can't
+      be started twice in a row (track gone, Init7 not reachable from the relay), the app falls back to the
+      channel's default track instead of retrying for good.
+    - The track is chosen by its index in the PMT, not by PID: HLS is a remux with its own PIDs, and the index
+      matches the order the player reports. So the switch no longer depends on the multicast track descriptions.
+    - **Two segments at the start.** Init7 publishes segments unevenly: mostly every ~5 s, at times 10 s apart.
+      A prototype that started with one segment froze for 6 s in two of three runs on the TV; with two segments,
+      six runs of 75 s (MP2 and AC-3) had no freeze, and lip sync was good by eye. The price: after a switch,
+      playback runs ~12 – 18 s behind live.
+    - Rejected alternative: keep the relay joined to the HLS channel's multicast group all the time. Equally
+      fast, but it costs the channel's bitrate on the network for as long as HLS is watched.
+    - The relay fetches only `https://*.init7.net`, so it can't be used to reach other hosts.

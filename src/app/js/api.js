@@ -2,18 +2,28 @@
 // Access is granted by the client's Init7 IP address; no login is involved.
 import { API_BASE, FHD_HLS_URL, FHD_MC_URL, M3U_URL } from './config.js';
 
-async function getText(url) {
-  const r = await fetch(url);
-  if (!r.ok) throw new Error('HTTP ' + r.status);
-  return r.text();
+// A request that never answers would otherwise hang for good (and with it the guide block it loads).
+const TIMEOUT_MS = 15000;
+
+// fetch with a time limit that also covers reading the body; `read` turns the response into the result.
+async function request(url, options, read) {
+  const ctl = new AbortController();
+  const timer = setTimeout(() => ctl.abort(), TIMEOUT_MS);
+  try {
+    const r = await fetch(url, { ...options, signal: ctl.signal });
+    if (!r.ok) throw new Error('HTTP ' + r.status);
+    return await read(r);
+  } finally {
+    clearTimeout(timer);
+  }
 }
+
+const getText = (url) => request(url, {}, (r) => r.text());
 
 async function getJson(url, retries = 2) {
   for (let attempt = 0; ; attempt++) {
     try {
-      const r = await fetch(url, { headers: { Accept: 'application/json' } });
-      if (!r.ok) throw new Error('HTTP ' + r.status);
-      return await r.json();
+      return await request(url, { headers: { Accept: 'application/json' } }, (r) => r.json());
     } catch (e) {
       if (attempt >= retries) throw e;
       await new Promise((res) => setTimeout(res, 1000 * (attempt + 1)));

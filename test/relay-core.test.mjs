@@ -87,3 +87,52 @@ test('createStreamBuffer stays correct across its internal compaction', () => {
   assert.equal(buf.chunks()[0][0], 4989 & 0xff);
   assert.equal(buf.bytes(), 11);
 });
+
+const { allowedHlsUrl, parseHlsPath, parsePlaylist, newSegments } = require('../src/service/relay-core.js');
+
+test('allowedHlsUrl accepts only https on init7.net hosts', () => {
+  assert.equal(allowedHlsUrl('https://api.tv.init7.net/api/live/?channel=abc'), true);
+  assert.equal(allowedHlsUrl('https://daserste-de.cache.tv.init7.net/x/1.ts'), true);
+  assert.equal(allowedHlsUrl('https://init7.net/files/x.m3u'), true);
+  assert.equal(allowedHlsUrl('http://api.tv.init7.net/api/live/'), false);
+  assert.equal(allowedHlsUrl('https://evilinit7.net/'), false);
+  assert.equal(allowedHlsUrl('https://init7.net.example.com/'), false);
+  assert.equal(allowedHlsUrl('https://user@init7.net.example.com/'), false);
+  assert.equal(allowedHlsUrl('https://127.0.0.1/'), false);
+  assert.equal(allowedHlsUrl(''), false);
+});
+
+test('parseHlsPath reads the playlist URL and the track index', () => {
+  const url = 'https://api.tv.init7.net/api/live/?channel=17ef&x=1';
+  assert.deepEqual(parseHlsPath('/hls?track=2&url=' + encodeURIComponent(url)), { url, track: 2 });
+  assert.deepEqual(parseHlsPath('/hls?url=' + encodeURIComponent(url)), { url, track: 0 });
+  assert.equal(parseHlsPath('/hls?track=1&url=' + encodeURIComponent('https://example.com/a.m3u8')), null);
+  assert.equal(parseHlsPath('/hls?track=x&url=' + encodeURIComponent(url)), null);
+  assert.equal(parseHlsPath('/hls?track=1&url=%E0%A4%A'), null);
+  assert.equal(parseHlsPath('/udp/233.50.230.26:5000'), null);
+});
+
+test('parsePlaylist returns absolute segment URLs on allowed hosts', () => {
+  const text = [
+    '#EXTM3U',
+    '#EXTINF:6.38,',
+    'https://daserste-de.cache.tv.init7.net/a/1.ts',
+    '#EXTINF:5.34,',
+    '2.ts\r',
+    'https://example.com/3.ts',
+    '',
+  ].join('\n');
+  assert.deepEqual(parsePlaylist(text, 'https://api.tv.init7.net/api/live/?channel=x'), [
+    'https://daserste-de.cache.tv.init7.net/a/1.ts',
+    'https://api.tv.init7.net/api/live/2.ts',
+  ]);
+});
+
+test('newSegments starts with the newest segments, then follows the playlist', () => {
+  const seen = new Set();
+  assert.deepEqual(newSegments(['a', 'b', 'c', 'd'], seen, 2), ['c', 'd']);
+  assert.deepEqual(newSegments(['a', 'b', 'c', 'd'], seen, 2), []);
+  assert.deepEqual(newSegments(['c', 'd', 'e', 'f'], seen, 2), ['e', 'f']);
+  assert.deepEqual([...seen].sort(), ['c', 'd', 'e', 'f']); // a and b left the playlist
+  assert.deepEqual(newSegments(['x'], new Set(), 2), ['x']);
+});

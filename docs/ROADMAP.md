@@ -11,7 +11,7 @@ Status of the project and open items.
 | EPG, banner, channel list, guide, options menu, hold-OK favourites | ✅ Verified on the TV with simulated key presses |
 | Restructured code (ES modules + esbuild), app id `io.github.ardadamarda.init7tv` | ✅ The v1.0.0 release `.ipk` from GitHub is installed on the TV; lineup, EPG, HLS and multicast via the relay verified |
 | Audio track list with broadcaster labels (relay `/info`) | ✅ Verified on the TV: Das Erste, arte D, SRF 1, ZDFneo |
-| Audio switching via the relay filter (`?audio=<pid>`) | ✅ In sync, verified by ear on Das Erste. Since the stream buffer: ~0.5 s (first switch on an HLS channel ~5 s), in sync by ear |
+| Audio switching via the relay filter (`?audio=<pid>`) | ✅ In sync, verified by ear on Das Erste. Since the stream buffer: ~0.5 s on multicast channels. HLS channels go through the relay's `/hls` route since 2026-11-14: ~1.5 – 2 s (Full HD 2 – 3 s), measured on the TV |
 | CI / release workflows | ✅ Running on GitHub; v1.0.0 and v1.1.0 released with the `.ipk` built by the release workflow |
 | v1.1.0: richer programme details in the guide and banner | ✅ Verified on the TV (2026-11-13) |
 | v1.1.0: fast zapping (only the channel you stop on is loaded) | ✅ Verified on the TV by hand (2026-11-13) |
@@ -73,6 +73,9 @@ Status of the project and open items.
 - [x] **Full HD SRG channels** (HEVC 1080p50, ~27 Mbit/s), verified on the TV (2026-11-13): SRF 1, SRF zwei and
       RTS 1 play in 1920×1080 and start in 0.6 – 0.7 s over HLS, like the 720p versions. Audio switch on SRF 1:
       first 4.5 s (the relay joins the FHD group), then 0.65 s with a 20 MB burst; nothing dropped.
+- [x] **A/V sync test for LG's `selectTrack`** (2026-11-14, `tools/avsync/`, filmed with a phone and analysed
+      per flash). On a relay stream: in sync (MP2 → MP2 seamless; MP2 ↔ AC-3 in sync with under 2 s of silence).
+      On HLS (SRF 1, Das Erste): 3 of 3 switches froze the picture for 8 – 12 s. Details in [decision 10](DECISIONS.md).
 - [ ] Guide refresh over a long session: leave the app open for a day and check that the guide follows schedule
       changes (the 3-hour reload is only covered by unit tests so far)
 - [ ] Does any channel's PMT span two UDP datagrams? In that case the audio filter passes the original PMT through
@@ -95,9 +98,30 @@ Status of the project and open items.
 
 ## Improvements
 
+- [x] **Faster first audio switch on HLS channels** (2026-11-14: option 3 built, see [decision 21](DECISIONS.md)). It took ~5 s, because the relay first has to join the
+      channel's multicast stream and collect the ~5 s of video the player waits for. Later switches on the same
+      channel take ~0.5 s. Switching inside LG's player is ruled out (it freezes HLS for 8 – 12 s, see
+      [decision 10](DECISIONS.md)), so the fix has to be in the relay. Options, cheapest first:
+      1. **Join when the audio menu opens** (~10 lines in the app): when ▶ → Audio opens on an HLS channel, the relay
+         joins the channel in the background. By the time a track is picked the buffer is mostly full, so expect
+         ~0.5 – 2 s. Network cost only after the menu was opened. **Recommended first step.**
+      2. **Keep the relay on the current HLS channel all the time:** every switch and "Reload stream" ~0.5 s, but the
+         channel's bitrate (~10 – 15 Mbit/s in HD) flows to the TV over multicast the whole time, on top of HLS.
+      3. **Fill the relay from Init7's HLS** (~100 – 150 lines in the relay): fetch the latest segment as the
+         burst, filter the audio, then continue. No multicast join and no extra network load. To check first:
+         whether the HLS segments are MPEG-TS the audio filter can handle.
+      4. Seamless switching (PID remapping, next item) only helps once the stream runs through the relay, so it
+         would only add to 2 or 3.
+
+      **Result (option 3, measured on the TV 2026-11-14):** every switch takes 1.3 – 1.8 s on Das Erste and
+      2.1 – 3 s on the Full HD SRF channels. The first switch got faster (from ~5 s), later switches on the same
+      channel got slower (from ~0.6 s). To get those back to ~0.6 s, option 3 would have to be combined with a
+      multicast join after the first switch. Downloading the two start segments side by side was tried and was
+      slower.
+
 - [ ] **Seamless audio switching (PID remapping in the relay).** Since 2026-10-21 a non-default audio track is
-      delivered alone by the relay (`?audio=<pid>`). That stays in sync but needs a reload: ~0.5 s with the stream buffer (~5 s for the first switch on an HLS
-      channel).
+      delivered alone by the relay (`?audio=<pid>`). That stays in sync but needs a reload: ~0.5 s with the stream buffer on a multicast channel,
+      ~1.5 – 2 s on an HLS channel (`/hls?track=<n>`).
       Idea: keep the player's relay connection open. The output always carries one audio stream under a fixed PID, and
       on a switch the relay starts forwarding the chosen source track's packets under that PID, beginning at a PES
       start. No reload, no pipeline track switch; all tracks share the PCR/PTS clock, so sync should hold. Expected
@@ -106,6 +130,9 @@ Status of the project and open items.
       - Needs playback through the relay (multicast), plus a control call to the relay to change the PID of a running
         stream (per connection id).
       - To verify: the decoder accepts the switch (bitrate change e.g. 256 → 192 kbit/s), and A/V sync by ear.
+      - Hint from the A/V sync test (2026-11-14): on a relay stream, LG's own `selectTrack` switched MP2 → MP2
+        seamlessly and in sync, and MP2 ↔ AC-3 in sync with under 2 s of silence. The TV's decoder therefore copes
+        with a track change in a running relay stream, which makes PID remapping look feasible.
 - [x] **Stream buffer in the relay, current channel** (2026-11-13). The burst test (see "Multicast start" under
       Verification) showed that the player starts ~0.5 s after it has ~5 s of video. The relay now joins each
       channel once for all its connections, keeps the last 6 s (at most 24 MB; ~11 MB for ZDFneo in HD, ~20 MB for the Full HD SRG channels) and sends
@@ -134,6 +161,14 @@ Status of the project and open items.
       EPG data arrives. Fine on a G5; likely to matter on older TVs.
 - [x] "Reload stream" entry in the options menu, for a stream that hangs (the official app has this on the red key).
       Added after v1.1.0; verified on the TV on a multicast channel (2026-11-13).
+- [ ] **Start a remembered audio language straight through the relay.** Today an HLS channel starts normally
+      and is reloaded with the remembered track once the player has reported its tracks (3.0 s on SRF zwei, with
+      a moment of the default language). Remembering each channel's track list would skip the first start. The
+      fallback to the default track (2026-11-14) covers a list that has changed.
+- [ ] Small clean-ups from a code review (2026-11-14): pause the 30 s housekeeping timer while the app is in
+      the background; check again by itself after "not authorised"; follow the HLS playlist by its media sequence
+      number instead of segment addresses (a playlist that steps back would repeat a segment; not observed).
+- [ ] Provoke the audio fallback and the segment retry on a real TV. Both are covered by unit tests only.
 - [ ] Debug overlay with codec and stream info (the official app has a "Show debug information" setting)
 - [ ] Mock mode for development: recorded API responses, so the UI can be worked on and tested in CI off the Init7
       network. The LG webOS simulator was considered and rejected, see [decisions](DECISIONS.md).

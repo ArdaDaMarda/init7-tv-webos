@@ -78,7 +78,7 @@ src/service/    webOS JS service (CommonJS, runs on the TV's Node.js): multicast
 assets/         icons
 scripts/        build.mjs, deploy.mjs
 test/           unit tests (lineup building, EPG store, programme details, relay helpers, PMT parsing/audio filter,
-                track labels, utils)
+                track labels, utils, the relay's /hls route, the player's audio fallback)
 tools/          debugging helpers (see tools/README.md)
 docs/           architecture, decisions, API notes, roadmap
 ```
@@ -103,6 +103,7 @@ queried with `fetch()` from the app's DevTools console:
 | `http://127.0.0.1:8077/stats` | Counters (clients, requests, packets, bytes, dropped clients, last error), the joined channels with their buffer, and the last 30 requests (player headers, time to first byte, bytes after 0.5–5 s, burst size, how they ended) |
 | `http://127.0.0.1:8077/info/<group>:<port>` | The channel's audio tracks from the multicast PMT (PID, codec, language, purpose) |
 | `http://127.0.0.1:8077/udp/<group>:<port>[?audio=<pid>]` | The stream, optionally with only one audio track |
+| `http://127.0.0.1:8077/hls?track=<n>&url=<encoded playlist URL>` | An HLS channel as MPEG-TS with only audio track n |
 
 `<group>:<port>` is the channel id, e.g. `233.50.230.6:5000` for Das Erste.
 

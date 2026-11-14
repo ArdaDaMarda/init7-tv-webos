@@ -5,11 +5,13 @@
  api.tv.init7.net ──┤ web app (src/app, bundled)                                        │
   channels, EPG,    │   ├─ HLS channel, default audio ─► <video> (native media pipeline)│
   HLS playlists     │   ├─ multicast channel ─► http://127.0.0.1:8077/udp/<group>:<port>│
-                    │   ├─ other audio track ─► …/udp/<group>:<port>?audio=<pid>        │
+                    │   ├─ other audio track ─► …/hls?track=<n>&url=<playlist>  (HLS)   │
+                    │   │                        …/udp/<group>:<port>?audio=<pid>       │
                     │   └─ track labels ──────► …/info/<group>:<port>                   │
                     │                                   │                               │
  api.init7.net ─────┤                     relay service (src/service, Node.js)          │
-  tvchannels.m3u    │                joins the multicast group, serves/filters MPEG-TS  │
+  tvchannels.m3u    │                joins the multicast group, serves/filters MPEG-TS; │
+                    │                fetches HLS segments for a single audio track      │
                     └───────────────────────────────────┬───────────────────────────────┘
                                                         │ IGMP join / UDP multicast
                                                   Init7 multicast 233.50.230.x:5000
@@ -19,7 +21,7 @@
 
 1. **Startup** (`main.js`): the cached lineup is started immediately with the last channel. Side by side the app
    checks access (`/api/v4/allowed/`), reloads the lineup and loads the guide data around "now"; none of the three
-   waits for another.
+   waits for another. Every request to Init7's API is given up after 15 s (`api.js`).
 2. **Lineup** (`channels.js` → `buildLineup`): the Init7 M3U provides all 242 channels in official order with logos and
    language groups. The channel API provides HLS URLs for 102 of them. They are joined by **multicast address**, which
    is also the channel id everywhere in the app (favourites, last channel, EPG). Init7's two Full HD lists replace
@@ -44,6 +46,14 @@
    - `/udp/<group>:<port>`: the stream as is
    - `/udp/<group>:<port>?audio=<pid>`: the stream with **only this audio track**. The PMT is rewritten with a new
      CRC and the other audio PIDs are dropped (`createAudioFilter` in `relay-core.js`).
+   - `/hls?track=<n>&url=<playlist>`: an HLS channel as one endless MPEG-TS stream with **only audio track n**
+     (index in the PMT). The relay polls Init7's playlist, fetches each new segment over HTTPS (only from
+     `*.init7.net`), filters it with the same `createAudioFilter` and writes it out. It starts with the newest two
+     segments (~12 s): Init7 publishes segments unevenly, sometimes 10 s apart, and with one segment the player ran
+     dry. Responses are shared for 3 s, so the player's second "probe" request for the same stream needs no second
+     download. No multicast join is involved. A client is dropped once 64 MB are unread. A segment
+     that fails to download is tried once more, then skipped; after ten failed requests in a row the connection
+     is closed.
    - `/info/<group>:<port>`: the audio tracks from the PMT, as JSON (see 6)
    - `/stats`: counters, the joined channels and a log of the last 30 requests, for debugging
 6. **Audio track labels** (`tracks.js` ↔ relay `/info/<group>:<port>`): after a channel starts, the relay parses
@@ -52,9 +62,12 @@
    same stream with relabelled languages, so special codes like `mis`/`qks` are treated as wildcards. Results are cached
    for 30 minutes per channel.
 7. **Audio track switching** (`player.js` → `reloadWithTrack`): any track switch inside the webOS pipeline loses A/V
-   sync, so a non-default track is never switched to. The channel is reloaded from the relay with `?audio=<pid>`, so
-   the player sees a single audio track and plays it as its default. This applies to HLS channels too. Track 1 uses the
-   normal path again. LG's `selectTrack` remains only as a fallback when the PIDs are unknown.
+   sync or freezes the picture, so a non-default track is never switched to. The channel is reloaded from the relay
+   with only that track, so the player sees a single audio track and plays it as its default: an HLS channel through
+   `/hls?track=<n>` (starts in ~1.5 – 2 s, no multicast needed), a multicast-only channel through `?audio=<pid>`. Track 1
+   uses the normal path again. If the single-track stream fails to start twice in a row, the player falls back to
+   the default track and says so. LG's `selectTrack` remains only as a fallback when a multicast-only channel's PIDs are
+   unknown.
 
 ## Why the native player
 

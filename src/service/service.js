@@ -3,7 +3,10 @@
 const Service = require('webos-service');
 const dgram = require('dgram');
 const http = require('http');
-const { backlog, payload, parseUdpPath, parsePmt, createAudioFilter, createStreamBuffer } = require('./relay-core');
+const https = require('https');
+const { parse: parseUrl, resolve: resolveUrl } = require('url');
+const core = require('./relay-core');
+const { backlog, payload, parseUdpPath, parsePmt, createAudioFilter, createStreamBuffer } = core;
 const { name: SERVICE_ID } = require('./package.json'); // written by the build: <app id>.relay
 
 const PORT = 8077;
@@ -18,6 +21,22 @@ const BUFFER_BYTES = 24 * 1024 * 1024;
 // After its last connection closes, a channel stays joined this long, so a reconnect finds the buffer. Only
 // the current channel is kept: an idle channel is left as soon as another one starts.
 const IDLE_MS = 10000;
+// HLS channels with a single audio track (/hls): the stream starts with the newest two segments (~12 s).
+// Init7 publishes segments unevenly, at times 10 s apart, and with one segment the player ran dry (TV test).
+const HLS_START_SEGMENTS = 2;
+const HLS_POLL_MS = 1000;
+const HLS_TIMEOUT_MS = 8000;
+const HLS_MAX_FAILURES = 10; // failed requests in a row before the connection is given up
+const HLS_RETRY_MS = 300; // a segment that fails is tried once more after this, then skipped
+const HLS_MAX_SEGMENT = 48 * 1024 * 1024; // a Full HD segment is ~20 MB
+// The first two Full HD segments are ~40 MB, written at once; the player reads them within a moment.
+const HLS_MAX_BACKLOG = 64 * 1024 * 1024;
+// The player opens each stream a second time as a probe and doesn't start before that is answered (see the
+// connection log). Responses are kept this long so the probe gets the same segments without a second download.
+const HLS_SEGMENT_TTL = 3000;
+const HLS_PLAYLIST_TTL = 500;
+const hlsAgent = new https.Agent({ keepAlive: true });
+const hlsCache = new Map(); // URL -> { waiters } while loading, then { body, finalUrl } until the TTL ends
 const service = new Service(SERVICE_ID);
 const stats = { started: Date.now(), clients: 0, requests: 0, packets: 0, bytes: 0, dropped: 0, lastError: null };
 const feeds = new Map(); // '<group>:<port>' -> feed, see openFeed
@@ -144,6 +163,11 @@ function handle(req, res) {
     describe(infoTarget, res);
     return;
   }
+  const hlsTarget = core.parseHlsPath(req.url);
+  if (hlsTarget) {
+    serveHls(hlsTarget, req, res, rec);
+    return;
+  }
   const target = parseUdpPath(req.url);
   if (!target) {
     res.writeHead(404);
@@ -197,6 +221,152 @@ function handle(req, res) {
   }
   feed.clients.add(client);
   req.on('close', () => close());
+}
+
+// GET of an Init7 URL into a Buffer: cb(err, body, finalUrl). Follows redirects within Init7's hosts.
+function fetchBuffer(url, maxBytes, cb, redirects) {
+  let done = false;
+  const finish = (err, body) => {
+    if (done) return;
+    done = true;
+    cb(err, body, url);
+  };
+  if (!core.allowedHlsUrl(url)) return finish(new Error('host not allowed'));
+  const req = https.get(Object.assign(parseUrl(url), { agent: hlsAgent, timeout: HLS_TIMEOUT_MS }), (r) => {
+    const left = redirects === undefined ? 3 : redirects;
+    if (r.statusCode >= 300 && r.statusCode < 400 && r.headers.location && left > 0) {
+      r.resume();
+      done = true;
+      fetchBuffer(resolveUrl(url, r.headers.location), maxBytes, cb, left - 1);
+      return;
+    }
+    if (r.statusCode !== 200) {
+      r.resume();
+      finish(new Error('HTTP ' + r.statusCode));
+      return;
+    }
+    const parts = [];
+    let size = 0;
+    r.on('data', (d) => {
+      size += d.length;
+      if (size > maxBytes) req.destroy(new Error('response too large'));
+      else parts.push(d);
+    });
+    r.on('end', () => finish(null, Buffer.concat(parts)));
+    r.on('error', finish);
+  });
+  req.on('timeout', () => req.destroy(new Error('timeout')));
+  req.on('error', finish);
+}
+
+// fetchBuffer, shared between the connections that ask for the same URL within `ttl` ms.
+function fetchShared(url, maxBytes, ttl, cb) {
+  let entry = hlsCache.get(url);
+  if (entry) {
+    if (entry.waiters) entry.waiters.push(cb);
+    else cb(null, entry.body, entry.finalUrl);
+    return;
+  }
+  entry = { waiters: [cb] };
+  hlsCache.set(url, entry);
+  fetchBuffer(url, maxBytes, (err, body, finalUrl) => {
+    const waiters = entry.waiters;
+    entry.waiters = null;
+    entry.body = body;
+    entry.finalUrl = finalUrl;
+    if (err) hlsCache.delete(url);
+    else setTimeout(() => hlsCache.delete(url), ttl);
+    waiters.forEach((w) => w(err, body, finalUrl));
+  });
+}
+
+// GET /hls?track=<n>&url=<playlist>: an HLS channel as one endless MPEG-TS stream with only audio track
+// <n>. Init7's HLS segments are plain MPEG-TS that carry all audio tracks, and the player can't switch
+// between them (it freezes, see DECISIONS.md). The segments are fetched here, filtered like the multicast
+// stream and joined. A segment brings ~6 s at once, so the player starts as fast as with HLS itself and
+// no multicast join is needed. Playback runs ~12 - 18 s behind live.
+function serveHls(target, req, res, rec) {
+  const seen = new Set();
+  let open = true;
+  let started = false;
+  let filter = null;
+  let failures = 0;
+  let timer = null;
+  const stop = (end) => {
+    logEnd(rec, end || 'client closed');
+    if (!open) return;
+    open = false;
+    clearTimeout(timer);
+    stats.clients--;
+  };
+  const fail = (text, end) => {
+    stats.lastError = 'hls: ' + text;
+    if (!started) res.writeHead(502);
+    stop(end || 'error');
+    res.end();
+  };
+  const failed = (err) => {
+    stats.lastError = 'hls: ' + err.message;
+    if (++failures >= HLS_MAX_FAILURES) fail(err.message);
+    return open;
+  };
+  const send = (segment) => {
+    if (!started) {
+      if (target.track > 0) {
+        const audio = parsePmt(segment);
+        if (!audio || !audio[target.track]) return fail('audio track ' + target.track + ' not found');
+        filter = createAudioFilter(audio[target.track].pid);
+      }
+      started = true;
+      res.writeHead(200, { 'Content-Type': 'video/mp2t', 'Cache-Control': 'no-cache', Connection: 'close' });
+    }
+    if (backlog(res) > HLS_MAX_BACKLOG) {
+      stats.dropped++;
+      stats.lastError = 'client too slow, dropped hls';
+      stop('dropped');
+      res.destroy();
+      return;
+    }
+    const data = filter ? filter(segment) : segment;
+    logData(rec, data.length);
+    res.write(data);
+  };
+  const next = (todo, retry) => {
+    if (!open) return;
+    if (!todo.length) {
+      timer = setTimeout(poll, HLS_POLL_MS);
+      return;
+    }
+    fetchShared(todo[0], HLS_MAX_SEGMENT, HLS_SEGMENT_TTL, (err, segment) => {
+      if (!open) return;
+      if (err) {
+        if (!failed(err)) return;
+        if (!retry) {
+          timer = setTimeout(() => next(todo, true), HLS_RETRY_MS);
+          return;
+        }
+      } else {
+        failures = 0;
+        send(segment);
+      }
+      next(todo.slice(1));
+    });
+  };
+  const poll = () => {
+    fetchShared(target.url, 1024 * 1024, HLS_PLAYLIST_TTL, (err, body, finalUrl) => {
+      if (!open) return;
+      if (err) {
+        if (failed(err)) timer = setTimeout(poll, HLS_POLL_MS);
+        return;
+      }
+      const urls = core.parsePlaylist(body.toString('utf8'), finalUrl);
+      if (!urls.length && !failed(new Error('empty playlist'))) return;
+      next(core.newSegments(urls, seen, HLS_START_SEGMENTS));
+    });
+  };
+  stats.clients++;
+  req.on('close', () => stop());
+  poll();
 }
 
 // GET /info/<group>:<port>: joins the group briefly and returns its audio tracks as described in
