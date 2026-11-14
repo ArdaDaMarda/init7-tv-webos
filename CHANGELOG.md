@@ -5,6 +5,8 @@ and versions follow [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [1.2.0] - 2026-11-14
+
 ### Added
 
 - Full HD (1080p) for SRF 1, SRF zwei, SRF info, RTS 1, RTS 2, RSI LA 1 and RSI LA 2: the app plays Init7's Full HD

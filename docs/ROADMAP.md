@@ -2,7 +2,7 @@
 
 Status of the project and open items.
 
-## Status (v1.1.0)
+## Status (v1.2.0)
 
 | Area | State |
 |---|---|
@@ -12,11 +12,14 @@ Status of the project and open items.
 | Restructured code (ES modules + esbuild), app id `io.github.ardadamarda.init7tv` | ✅ The v1.0.0 release `.ipk` from GitHub is installed on the TV; lineup, EPG, HLS and multicast via the relay verified |
 | Audio track list with broadcaster labels (relay `/info`) | ✅ Verified on the TV: Das Erste, arte D, SRF 1, ZDFneo |
 | Audio switching via the relay filter (`?audio=<pid>`) | ✅ In sync, verified by ear on Das Erste. Since the stream buffer: ~0.5 s on multicast channels. HLS channels go through the relay's `/hls` route since 2026-11-14: ~1.5 – 2 s (Full HD 2 – 3 s), measured on the TV |
-| CI / release workflows | ✅ Running on GitHub; v1.0.0 and v1.1.0 released with the `.ipk` built by the release workflow |
+| CI / release workflows | ✅ Running on GitHub; v1.0.0, v1.1.0 and v1.2.0 released with the `.ipk` built by the release workflow |
 | v1.1.0: richer programme details in the guide and banner | ✅ Verified on the TV (2026-11-13) |
 | v1.1.0: fast zapping (only the channel you stop on is loaded) | ✅ Verified on the TV by hand (2026-11-13) |
 | v1.1.0: relay drops a client that stops reading (32 MB backlog) | ✅ Verified on the TV with a deliberately slow client: `/stats` → `dropped: 1` |
 | v1.1.0: guide data reloaded every 3 h; parallel start | ✅ Unit tests and desktop Chrome; not observed over days on the TV yet |
+| v1.2.0: stream buffer for the current multicast channel, Full HD SRG channels, "Reload stream" | ✅ Verified on the TV (2026-11-13) |
+| v1.2.0: audio switch on HLS channels through the relay's `/hls` route | ✅ Verified on the TV (2026-11-14): Das Erste, SRF 1, SRF zwei |
+| v1.2.0: fallback to the default audio track, segment retry, 15 s request limit | ⚠️ Unit tests only; not provoked on the TV |
 | Rooted TV (Homebrew Channel) | ✅ The app runs on the rooted test TV; v1.1.0 installed through the TV's installer service over SSH, see [Contributing](../CONTRIBUTING.md#rooted-tvs) |
 
 ## Verification on a real TV
