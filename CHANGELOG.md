@@ -5,6 +5,10 @@ and versions follow [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Changed
+
+- Docs shortened and reorganised around the key findings: the LG player's limits, the relay and its tricks.
+
 ## [1.2.0] - 2026-11-14
 
 ### Added

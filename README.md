@@ -16,29 +16,32 @@ a programme guide.
 
 ## Features
 
-- **All 242 Init7 channels**: 102 via HLS, plus 140 multicast-only channels through a small relay that runs on the
-  TV itself. No extra device and no router changes are needed.
-- **Fast switching** on the 102 HLS channels (~0.6 s). Multicast channels take ~5 s to start; after that, reloading
-  them or switching their audio track takes ~0.5 s. When you zap quickly through several channels, only the one you
-  stop on is loaded.
-- **Full HD** for the SRG channels SRF 1, SRF zwei, SRF info, RTS 1, RTS 2, RSI LA 1 and RSI LA 2 (Init7 offers
-  them in 1080p on a separate list; the app uses it automatically)
-- **Programme guide** for 241 channels: info banner with now/next, and a guide grid with live picture-in-picture
-- **Programme details** where the broadcaster provides them: episode title, genre, duration, season and episode,
-  country, age rating, host, cast and director
+- **All 242 Init7 channels**: 102 via HLS (start in ~0.6 s) and 140 multicast-only channels through a small relay
+  on the TV itself (~5 s). No extra device or router changes. When you zap quickly, only the channel you stop on loads.
+- **Full HD** for SRF 1, SRF zwei, SRF info, RTS 1, RTS 2, RSI LA 1 and RSI LA 2
+- **Programme guide** with now/next banner, programme details and live picture-in-picture
 - **Channel list** with logos, what's on now, favourites and filters (All / ★ / DE / FR / IT / EN / World)
-- **Audio track list** with the broadcaster's descriptions, e.g. "Deutsch · Audio description", "Deutsch · Clean
-  audio", "Dolby Digital 5.1", read live from the multicast stream. Switching stays in A/V sync (the relay delivers
-  the chosen track alone). It takes ~0.5 s on a multicast channel and ~1.5 – 2 s on an HLS channel. The language is remembered across channels;
-  if a track can't be played, the channel falls back to its default track.
-  The tracks are what the broadcaster sends: e.g. SRF's "English" track only carries English for foreign productions,
-  while arte always offers German and French.
-- Channel number entry, resumes the last channel on start
+- **Audio track list** with the broadcaster's labels ("Deutsch · Audio description", "Dolby Digital 5.1"). Switching
+  stays in A/V sync and takes ~0.5 s on multicast and ~1.5 – 2 s on HLS channels (after a switch on HLS, playback
+  runs ~15 s behind live). The language is remembered across channels.
+- Channel number entry; resumes the last channel on start
 - Controls designed for the **LG AI Magic Remote** (no colour buttons needed); classic remotes work too
 
 > **Not affiliated with Init7 or LG.** It works only on an Init7 internet connection, because Init7 grants stream
 > access by your connection's IP address. No streams, logos or Init7 branding are bundled. Channel data and logos
 > are loaded at runtime from Init7's public endpoints. The app collects **no telemetry**.
+
+## How it works
+
+Init7 passes DVB broadcasts through unchanged (MPEG-2/H.264, MP2/AC-3), which browser players can't decode, so the
+app uses the TV's native player. That player has two limits, which a small relay service on the TV works around:
+
+- It can't open multicast (`udp://`). The relay joins the multicast group and serves the stream over HTTP.
+- Switching audio tracks inside it loses A/V sync or freezes the picture. The relay delivers a stream with only the
+  chosen track instead, for HLS channels by fetching and filtering Init7's segments itself.
+
+The player also waits for ~5 s of video before it starts, so the relay keeps the last 6 s of the channel and sends
+them at once: a reload or an audio switch on a multicast channel takes ~0.5 s. Details: [Decisions & findings](docs/DECISIONS.md).
 
 ## Install
 
@@ -104,18 +107,16 @@ Please report your TV in a [compatibility issue](../../issues/new/choose).
 
 ## Documentation
 
-- [Architecture](docs/ARCHITECTURE.md): how HLS, the relay and the EPG fit together
-- [Decisions & findings](docs/DECISIONS.md): why it is built this way, including why generic IPTV apps fail on webOS
+- [Decisions & findings](docs/DECISIONS.md): the LG player's limits, the relay and its tricks
+- [Architecture](docs/ARCHITECTURE.md): modules and relay endpoints
 - [Init7 API notes](docs/API.md): the endpoints the app uses
 - [Roadmap](docs/ROADMAP.md): status, open tests, ideas
-- [Contributing](CONTRIBUTING.md): building, deploying to your TV, debugging, tests
+- [Contributing](CONTRIBUTING.md): building, deploying, debugging
 
 ## Review
 
-On 2026-11-13 the project was reviewed with Anthropic's Claude Fable 5.2 model: a read-through of the whole codebase
-and a second look at the official Android app for ideas. The fixes and improvements that came out of it are listed
-under versions 1.1.0 and 1.2.0 in the [changelog](CHANGELOG.md), and the findings are in
-[Decisions & findings](docs/DECISIONS.md) and the [roadmap](docs/ROADMAP.md).
+On 2026-11-13 and 14 the codebase was reviewed with Anthropic's Claude Fable 5.2 model. The resulting fixes are in
+versions 1.1.0 and 1.2.0 of the [changelog](CHANGELOG.md).
 
 ## License
 

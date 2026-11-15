@@ -1,147 +1,94 @@
 # Contributing
 
-Thanks for helping! Bug reports, compatibility reports for other TVs, and pull requests are all welcome.
+Bug reports, compatibility reports for other TVs and pull requests are welcome.
 
-## Development setup
+## Setup
 
-Requirements: [Node.js](https://nodejs.org) 20+ (24 LTS recommended, see `.nvmrc`), an LG webOS TV in
-Developer Mode (see the [README](README.md#install)), and an Init7 connection for anything that talks to the API.
-
-```sh
-npm install          # installs esbuild, ESLint, Prettier and the webOS CLI locally (no global installs)
-```
-
-### Register your TV once
+Requirements: [Node.js](https://nodejs.org) 20+ (24 LTS, see `.nvmrc`), an LG webOS TV in Developer Mode (see the
+[README](README.md#install)), and an Init7 connection for anything that talks to the API.
 
 ```sh
+npm install                                    # esbuild, ESLint, Prettier and the webOS CLI, all local
 npx ares-setup-device -a tv -i "host=<TV-IP>" -i "port=9922" -i "username=prisoner" -i "default=true"
-npx ares-novacom -d tv --getkey      # enter the passphrase from the Developer Mode app
-npx ares-device -i -d tv             # should print model, SDK and firmware version
+npx ares-novacom -d tv --getkey                # enter the passphrase from the Developer Mode app
+npx ares-device -i -d tv                       # should print model and firmware
 ```
 
-If `--getkey` downloads the key (`~/.ssh/tv_webos`) but the connection still fails, set the reference explicitly:
-
-```sh
-npx ares-setup-device -m tv -i "privatekey=tv_webos" -i "passphrase=<PASSPHRASE>"
-```
+If the key is downloaded but the connection still fails:
+`npx ares-setup-device -m tv -i "privatekey=tv_webos" -i "passphrase=<PASSPHRASE>"`.
 
 ### Rooted TVs
 
-On a rooted TV (Homebrew Channel) the Developer Mode login on port 9922 may be closed. Register the root SSH login
-instead and use it for listing and launching:
+On a rooted TV (Homebrew Channel) port 9922 may be closed. Register the root SSH login instead:
 
 ```sh
 npx ares-setup-device -a tvroot -i "host=<TV-IP>" -i "port=22" -i "username=root" -i "password=<ROOT-PASSWORD>"
-npx ares-install -d tvroot --list
-npx ares-launch -d tvroot <app id>
 ```
 
-On the test TV (LG G5, webOS 25) `ares-install` of a package failed over this login with "Unable to exec". When
-`ares-install` fails, `npm run dev` and `npm run deploy` therefore fall back to the steps below by themselves, so
-`npm run dev -- --device tvroot` works there. The cause of "Unable to exec": after an SFTP upload, the same SSH
-session can't start another command, so the fallback uses one session for the upload and a second one for the
-installer call. By hand, what worked:
+`ares-install` fails over this login ("Unable to exec": after an SFTP upload the same SSH session can't start
+another command). `npm run dev` and `npm run deploy` then fall back by themselves to:
 
-1. `npm run package`, then copy the `.ipk` to `/media/developer/temp/` on the TV over SSH.
-2. On the TV: `luna-send -i -f luna://com.webos.appInstallService/dev/install
-   '{"id":"<app id>","ipkUrl":"/media/developer/temp/<file>.ipk","subscribe":true}' < /dev/null`.
-   It reports the states up to `installed`; stop it then (the closing "install has been disconnected" is harmless).
-3. **Give `luna-send` `< /dev/null` as its input** when you run it over a non-interactive SSH session. Without it,
-   `luna-send` exited at once with no output and nothing was installed, which looked like a dead installer.
+1. copy the `.ipk` to `/media/developer/temp/` over SSH;
+2. in a second session, run `luna-send -i -f luna://com.webos.appInstallService/dev/install
+   '{"id":"<app id>","ipkUrl":"/media/developer/temp/<file>.ipk","subscribe":true}' < /dev/null`. Stop it once it
+   reports `installed`; the closing "install has been disconnected" is harmless.
 
-Change the default root password of a rooted TV, or switch to key-based login.
+**Give `luna-send` `< /dev/null`** over non-interactive SSH; without it, it exits silently and installs nothing.
+Change the root password of a rooted TV, or switch to key-based login.
 
-## Everyday commands
+## Commands
 
 | Command | What it does |
 |---|---|
-| `npm run dev` | Build with source maps, package and install on the default TV, then launch |
-| `npm run dev -- --device tv` | Same for a specific registered device (or set `TV_DEVICE=tv`) |
-| `npm run build` | Bundle into `build/` (app + service with generated manifests) |
-| `npm run package` | Build and create `dist/<appId>_<version>_all.ipk` |
-| `npm run deploy` | Install the existing package on the TV and launch it |
-| `npm run inspect` | Open the web inspector for the running app (prints a DevTools URL) |
-| `npm test` | Unit tests (Node's built-in test runner, no TV needed) |
-| `npm run lint` / `npm run format` | ESLint / Prettier |
-| `npm run check` | Lint + format check + tests, the same as CI |
+| `npm run dev [-- --device tv]` | Build with source maps, package, install and launch (or set `TV_DEVICE`) |
+| `npm run build` / `npm run package` | Bundle into `build/` / create `dist/<appId>_<version>_all.ipk` |
+| `npm run deploy` | Install the existing package and launch it |
+| `npm run inspect` | Web inspector for the running app (prints a DevTools URL) |
+| `npm test` / `npm run check` | Unit tests / lint + format check + tests, same as CI |
 
-The app id and the launcher title live in `package.json` → `webos`. The version is `package.json` → `version`.
-The build writes both into `appinfo.json` and the service manifests.
-
-## Project layout
-
-```
-src/app/        web UI: plain ES modules, bundled by esbuild into one classic script (build/app/app.js)
-  js/main.js    entry point: startup, key routing
-  js/*.js       one module per concern (api, channels, epg, player, relay client, UI parts)
-src/service/    webOS JS service (CommonJS, runs on the TV's Node.js): multicast -> HTTP relay
-assets/         icons
-scripts/        build.mjs, deploy.mjs
-test/           unit tests (lineup building, EPG store, programme details, relay helpers, PMT parsing/audio filter,
-                track labels, utils, the relay's /hls route, the player's audio fallback)
-tools/          debugging helpers (see tools/README.md)
-docs/           architecture, decisions, API notes, roadmap
-```
-
-There is deliberately **no UI framework**. The app is small, and plain DOM keeps it fast on TV hardware.
+App id and title live in `package.json` → `webos`, the version in `version`. There is deliberately **no UI
+framework**; the layout is described in [Architecture](docs/ARCHITECTURE.md).
 
 ## Debugging on the TV
 
-```sh
-npm run inspect
-```
-
-Open the printed `http://localhost:<port>/devtools/...` URL in Chrome, or script it with
+`npm run inspect`, then open the printed URL in Chrome, or script it:
 `node tools/cdp.mjs <ws-url> key:13 wait:500 shot:list.png "eval:App.player.current().name"`.
+DevTools screenshots show the UI only; the video plane is blank.
 
-The app exposes a debug handle `window.App`: `player` (incl. `audioTracks()`), `channels`, `epg`, `settings`,
-`keyLog` (the last 40 key codes, handy for unknown remote buttons) and `tune(channel)`. The relay on the TV can be
-queried with `fetch()` from the app's DevTools console:
+`window.App` exposes `player`, `channels`, `epg`, `settings`, `keyLog` (last 40 key codes) and `tune(channel)`. The
+relay can be queried with `fetch()` from the app's console (`<group>:<port>` is the channel id, e.g.
+`233.50.230.6:5000` for Das Erste):
 
 | Relay URL (on the TV) | Returns |
 |---|---|
-| `http://127.0.0.1:8077/stats` | Counters (clients, requests, packets, bytes, dropped clients, last error), the joined channels with their buffer, and the last 30 requests (player headers, time to first byte, bytes after 0.5–5 s, burst size, how they ended) |
-| `http://127.0.0.1:8077/info/<group>:<port>` | The channel's audio tracks from the multicast PMT (PID, codec, language, purpose) |
-| `http://127.0.0.1:8077/udp/<group>:<port>[?audio=<pid>]` | The stream, optionally with only one audio track |
-| `http://127.0.0.1:8077/hls?track=<n>&url=<encoded playlist URL>` | An HLS channel as MPEG-TS with only audio track n |
+| `http://127.0.0.1:8077/stats` | Counters, joined channels, the last 30 requests |
+| `http://127.0.0.1:8077/info/<group>:<port>` | The channel's audio tracks from the multicast PMT |
+| `http://127.0.0.1:8077/udp/<group>:<port>[?audio=<pid>]` | The stream, optionally with one audio track |
+| `http://127.0.0.1:8077/hls?track=<n>&url=<encoded playlist URL>` | An HLS channel with only audio track n |
 
-`<group>:<port>` is the channel id, e.g. `233.50.230.6:5000` for Das Erste.
-
-To check what a channel's audio tracks really contain (e.g. whether "English" is English right now), use
-`tools/audio-compare.mjs`; see [tools/README.md](tools/README.md).
-
-DevTools screenshots show the UI only. The video plane appears as a blank area.
+`tools/audio-compare.mjs` shows what a track really contains (e.g. whether "English" is English right now).
 
 ## Testing without a TV
 
 `npm run build`, then open `build/app/index.html` in Chrome started with `--disable-web-security` and a separate
-`--user-data-dir`. The TV ignores CORS for packaged apps; desktop Chrome needs the flag. From an Init7 connection
-the channel list, guide and banner work fully. Video playback and the multicast relay need the TV.
+`--user-data-dir` (the TV ignores CORS for packaged apps). On an Init7 connection the channel list, guide and banner
+work; video and the relay need the TV. For scripted checks add `--headless=new --remote-debugging-port=9333` and
+drive the page from `http://127.0.0.1:9333/json` with `tools/cdp.mjs`.
 
-For scripted checks start Chrome with `--headless=new --remote-debugging-port=9333` as well, take the page's
-`webSocketDebuggerUrl` from `http://127.0.0.1:9333/json` and drive it with `tools/cdp.mjs` (keys, `eval`,
-screenshots). LG's webOS simulator is not used: it is a desktop Chromium too and has no TV media pipeline.
+## Dependencies
 
-## Dependencies and `npm audit`
-
-The app has **no runtime dependencies**. Everything in `package.json` is a dev tool, and nothing from `node_modules`
-ends up in the `.ipk`. `npm audit` currently reports findings that are all transitive dependencies of LG's
-`@webos-tools/cli`, which only runs on the developer machine or in CI. `npm audit --omit=dev` is clean. They cannot
-be fixed from this repository: the CLI pins its dependency tree with an `npm-shrinkwrap.json`, so `npm audit fix` and
-npm `overrides` have no effect. The matching Dependabot alerts are dismissed with that explanation.
-
-Install scripts are restricted via `allowScripts` in `package.json`: only esbuild and the webOS CLI may run them.
+The app has **no runtime dependencies**; nothing from `node_modules` ends up in the `.ipk`. `npm audit` findings
+all come from LG's `@webos-tools/cli`, which pins its tree with a shrinkwrap, so they can't be fixed here
+(`npm audit --omit=dev` is clean). Install scripts are limited to esbuild and the webOS CLI (`allowScripts`).
 
 ## Pull requests
 
-- Run `npm run check` before pushing; CI runs the same checks and builds the `.ipk`.
-- Keep pure logic in modules without DOM access, so it can be unit-tested (see `test/`).
-- Never commit decompiled code from the official Init7 apps, stream captures or screenshots containing broadcast
-  content.
+- Run `npm run check`; CI runs the same and builds the `.ipk`.
+- Keep pure logic out of DOM modules so it can be unit-tested.
+- Never commit decompiled code from the official Init7 apps, stream captures or broadcast screenshots.
 - Say which TV, webOS version and remote you tested on.
 
 ## Releasing
 
-1. Bump `version` in `package.json` and add an entry to `CHANGELOG.md`.
-2. Commit, then tag: `git tag v1.2.3 && git push --tags`.
-3. The release workflow builds the `.ipk` and attaches it to a GitHub Release.
+Bump `version` in `package.json`, add a `CHANGELOG.md` entry, commit, then `git tag v1.2.3 && git push --tags`.
+The release workflow attaches the `.ipk` to a GitHub Release.

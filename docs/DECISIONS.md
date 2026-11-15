@@ -1,150 +1,94 @@
 # Decisions & findings
 
-How the app came to be, and why it is built the way it is. Each finding was verified on a real TV
-(LG G5, webOS 25) unless noted otherwise.
+Why the app is built the way it is. Everything here was measured on an LG G5 (webOS 25) unless noted.
 
-1. **Reverse engineering, not porting.** An Android APK cannot run on webOS, which has no Android runtime. The
-   official Android TV app was inspected only to learn which public API endpoints it calls. The result: a small REST
-   API at `api.tv.init7.net/api/` with IP-based access, no login and **no DRM**. IPv6 works as well as IPv4, and the
-   User-Agent is not checked. No code from the official app is used or included.
-   A second look at the official app (v1.2.5, 2026-11-13) searched for playback tricks worth adopting and found
-   none: it is a standard ExoPlayer app that opens `udp://` directly (behind an "Activate multicast" setting),
-   starts a new stream on every channel switch without pre-buffering, and retries 500 ms after an error. What it has
-   and this app lacks: subtitles, replay (paid) and a debug overlay; see the roadmap.
+## The Init7 service
 
-2. <a name="codecs"></a>**Why generic webOS IPTV apps fail.** The streams are **DVB pass-through**: MPEG-2 or H.264
-   video with MP2 or AC-3 audio (e.g. ProSieben and BBC One are MPEG-2 + MP2, SRF 1 is H.264 + 3× AC-3). Browser
-   players (hls.js/MSE) can't decode MPEG-2 or MP2. The TV's **native media pipeline** can, so the app gives the stream
-   URL straight to `<video>`. Every codec mix plays.
+- **Public API, no DRM.** The official Android TV app was inspected only to find its endpoints: a REST API at
+  `api.tv.init7.net/api/`, access by IP address, no login. No code from it is used. It is a plain ExoPlayer app with
+  no playback tricks worth copying.
+- <a name="codecs"></a>**DVB pass-through codecs.** Streams carry the broadcast originals: MPEG-2 or H.264 video with
+  MP2 or AC-3 audio. Browser players (hls.js/MSE) can't decode MPEG-2 or MP2, which is why generic webOS IPTV apps
+  fail. The TV's native pipeline can, so the app hands every URL straight to `<video>`.
+- **Lineup from the M3U.** The multicast address is the only key shared by the M3U, the channel API and the EPG, so
+  it is the channel id everywhere. Init7's Full HD lists replace the stream of 7 SRG channels.
+- **Replay is not built.** It is a paid add-on and the test account has no entitlement; see [API notes](API.md#replay).
 
-3. **No UI framework.** A small app with plain DOM modules stays fast on TV hardware and is easy to read.
-   esbuild only bundles; there is no transpiling beyond the syntax target.
+## <a name="audio-switching"></a>The LG player can't switch audio tracks
 
-4. **CORS is not an issue.** The API sends no CORS headers, but packaged webOS apps can call it directly, so no proxy
-   is needed.
+Any track switch inside the webOS pipeline, via `video.audioTracks` or LG's `luna://com.webos.media/selectTrack`,
+caused silence and lost A/V sync. A re-test with the precautions other webOS players use (valid `mediaId`, ≥ 3 s of
+playback, one call at a time, `tools/avsync/`) showed:
 
-5. **Multicast needs a relay.** 140 of the 242 channels are multicast-only; their HLS URLs return HTTP 410. The TV's
-   web engine **cannot open `udp://` or `rtp://`**. Eight variants were tested and confirmed visually: plain,
-   `video/mp2t`, `rtp://`, the `video.src` attribute, and webOS `mediaOption` UDP/URI/DLNA. None produced picture or
-   sound.
+- on a relay stream `selectTrack` stays in sync (MP2 → MP2 seamless, MP2 ↔ AC-3 with < 2 s of silence);
+- on Init7's **HLS** every switch froze the picture for 8 – 12 s, on both HLS servers, even with the same codec.
 
-6. **The relay runs on the TV, not on the router.** A webOS JS service joins the multicast group and serves MPEG-TS
-   over HTTP on localhost, so no extra hardware or router changes are needed. Moving it to the router would not make
-   switching faster: the delay comes from the IGMP join, waiting for a keyframe and the player's buffer, and those are
-   the same on either device.
+So the app never switches tracks in the player. It reloads the stream through the relay with **only the chosen
+track** in it, and the player plays that as its default. LG's `selectTrack` is kept only as a fallback when a
+multicast channel's PIDs are unknown.
 
-7. **HLS where available.** It starts in ~0.6 s versus ~5 s for multicast (measured on the TV on 2026-11-13;
-   the ~1.4 s stated earlier was wrong). The multicast delay is in the TV's player, not in the relay: see the
-   [roadmap](ROADMAP.md#verification-on-a-real-tv).
+Track labels show only what the broadcaster sends: SRF's `eng` track repeats the German sound outside foreign
+productions, and a track without a real language code is shown as its code (e.g. "MIS"), never guessed. Init7's
+HLS strips the purpose descriptors (audio description, clean audio), so labels are read from the multicast PMT.
 
-8. **Lineup from the M3U, ids = multicast addresses.** That address is the only key shared by the M3U, the channel API
-   and the EPG. Channel numbers follow Init7's M3U order (e.g. 26 = ZDFneo, 58 = Phoenix).
+## <a name="relay"></a>Why a relay, and why on the TV
 
-9. **AI Magic Remote first** ([picture](images/lg-ai-magic-remote-mr25.png)). The 2025 remote (MR25) has no colour
-   or INFO keys, so: ▶ opens an options menu (with the audio track list), ◀ opens the guide, holding OK toggles a
-   favourite, and the wheel switches channels. The GUIDE button is caught by the TV (it opens LG's own guide), and the
-   AI button opens LG's AI menu; neither reaches the app. Audio description or multilingual tracks (`nar`, `qad`,
-   `mul`, `qaa`) are never stored as the preferred language.
+- **140 of the 242 channels are multicast-only** (their HLS URL returns 410), and the TV's web engine can't open
+  `udp://` or `rtp://`; eight variants were tried. A small webOS JS service on the TV joins the multicast group and
+  serves MPEG-TS on `127.0.0.1:8077`. No extra device or router change is needed, and a relay on the router would not
+  be faster.
+- **The relay is also the audio switch** (see above): it filters out the other audio PIDs and rewrites the PMT with
+  a new CRC.
 
-10. **Audio tracks are never switched inside the player.** Any track switch in the webOS pipeline, whether via
-    `video.audioTracks` or LG's `luna://com.webos.media/selectTrack`, during playback or right after the start, led
-    to silence and lost A/V sync. Instead, the relay delivers the multicast stream with only the chosen audio track
-    (PMT rewritten, other audio PIDs dropped), and the player plays it as its default. This is in sync but costs a
-    reload: ~0.5 s from the relay's buffer (see 20). For HLS channels the relay filters Init7's HLS segments instead
-    (see 21). LG's `selectTrack` remains only as a fallback when a multicast-only channel's track PIDs are unknown.
-    **Re-tested 2026-11-14 with the precautions other webOS players use** (a valid `mediaId`, at least 3 s of running
-    playback, one awaited call at a time), using `tools/avsync/`:
-    - On a synthetic MPEG-TS stream played through the relay, `selectTrack` stayed in sync. Median offsets were within
-      ±20 ms of the reference, both for MP2 → MP2 (seamless) and for MP2 ↔ AC-3 (under 2 s of silence, no freeze).
-      AC-3 runs ~20 ms later than MP2 with the relay reload too, so that delay comes from the TV's decoder.
-    - On Init7's **HLS**, every real switch froze the picture: SRF 1 (AC-3 → AC-3) for ~8 s, and Das Erste (MP2 →
-      MP2) for ~12 s, twice. This held on both HLS servers and even when the codec stayed the same. The app's stall
-      watchdog then reloads the stream, and the track choice is lost.
-    - So `selectTrack` is unusable on HLS. On relay streams it works, but gains nothing over the ~0.5 s reload
-      except that the picture keeps running. The relay reload stays the only switching method; the faster first switch
-      on HLS channels came from the relay (see 21).
-    Note that the track labels are the broadcaster's: SRF's `eng` track carries English only for foreign productions
-    and repeats the German sound otherwise. Das Erste and ZDF only have German variants (stereo, audio description,
-    clean audio, Dolby), while arte has German and French. Init7's HLS strips the descriptors that name these
-    purposes; the multicast stream keeps them (visible in VLC). `tools/audio-compare.mjs` shows what a track really
-    contains. **Labels show only what the stream says:** a track without a real language code is shown with its code
-    (e.g. arte's audio description as "MIS · Audio description"), not with a language guessed from the main track.
-    Accuracy wins over readability.
+## Relay tricks
 
-11. **Replay is not implemented.** The test account has no replay entitlement (`replay_grant: null`), so it cannot
-    be tested. Replay is a paid add-on that the official app links by QR code and PIN. With it, that app plays even
-    live TV through the replay endpoint for the current programme, which is how it offers pause and restart; see
-    [API notes](API.md#replay).
+- <a name="stream-buffer"></a>**Burst of the last 6 s.** The TV's player starts only once it has ~5 s of video,
+  whatever the bitrate, so a live multicast stream takes ~5 s to start, while HLS (a segment brings several seconds
+  at once) takes ~0.6 s. A burst test proved it: after 5 s of data in one burst the player started 0.3 – 0.5 s later.
+  The relay therefore keeps the last 6 s of the current channel (≤ 24 MB) and sends them to every new connection
+  at once: a reload or audio switch on a multicast channel takes ~0.5 s. A fresh channel start still takes ~5 s.
+- **One join per channel, only the current one.** All connections share a channel's join; it stays joined 10 s
+  after the last connection unless another channel plays. Joining neighbours in advance would make zapping fast but
+  costs each channel's bitrate (~11 Mbit/s in HD) the whole time, so it was left out.
+- **Answer the probe at once.** The player opens every stream a second time as a short probe and doesn't start
+  until it is answered.
+- **Never buffer without limit.** The relay writes without pausing the socket and drops a client once 32 MB are
+  unread (64 MB for `/hls`); the app's retry reconnects. Only multicast group addresses are accepted.
 
-12. **Distribution through Developer Mode.** Sideloading needs an active Developer Mode session, which has to be
-    extended regularly. This stays the documented way, because rooting (Homebrew Channel) depends on firmware
-    exploits. The app also runs on a rooted TV, where it persists without a session (the test TV is rooted since
-    2026-11). The LG Content Store is not an option for an unofficial client of a third-party service.
+### <a name="hls-relay"></a>Audio switch on HLS channels: `/hls`
 
-13. **Open-source hygiene.** Neutral name ("TV for Init7") and app id (`io.github.ardadamarda.init7tv`, configurable in `package.json`). No Init7
-    branding, streams or broadcast screenshots in the repo, and no telemetry.
+Joining an HLS channel's multicast stream for another track took ~5 s on the first switch. Instead, the relay now
+fetches Init7's HLS segments (plain, unencrypted MPEG-TS that carry all tracks), filters them with the same audio
+filter and writes them as one endless stream (`/hls?track=<n>&url=<playlist>`).
 
-14. **Fast zapping loads only the last channel.** A single press switches at once. While presses keep coming within
-    400 ms, only the banner follows and the stream starts 250 ms after the last one. Otherwise every channel in
-    between would start a stream, and for multicast a relay connection and a group join.
+- **Starts with the two newest segments.** Init7 publishes segments unevenly (sometimes 10 s apart); with one
+  segment the player froze for 6 s. Cost: ~12 – 18 s behind live after a switch.
+- **Fetched data is shared for 3 s,** so the player's probe doesn't download the segments again (that took 2.2 – 4 s).
+- **Track by PMT index, not PID:** HLS is a remux with its own PIDs, and the index matches the player's order.
+- A failed segment is tried once more after 0.3 s, then skipped. If the stream fails to start twice, the app falls
+  back to the default track. The relay fetches only from `https://*.init7.net`.
+- Result: 1.3 – 1.8 s per switch (Full HD SRF 2 – 3 s), every time, in sync.
+- **Tried and dropped:** downloading the two start segments side by side (slower: 1.7 vs 1.4 s, Full HD 3.1 vs
+  2.1 s), fetching the next segment only after the player took the previous one (no gain), and keeping the multicast
+  join on all the time (as fast, but costs the bitrate for as long as HLS is watched).
 
-15. **Guide data expires.** A TV app is suspended rather than closed, so it can stay open for days. Each 6-hour
-    block of guide data is therefore reloaded after 3 hours (unless it lies in the past), and programmes the API no
-    longer returns are removed. If a reload fails, the old data stays and the next try comes 5 minutes later.
+## App
 
-16. **The relay never buffers without limit.** A live stream is written to the player without pausing the socket.
-    If the player stops reading, the relay drops it once 32 MB (about 20 s of HD) are unread; the app's playback
-    retry reconnects.
+- **Plain DOM, no framework,** bundled by esbuild for Chrome 68 (webOS 5). Packaged apps may call the API without CORS.
+- **AI Magic Remote first.** The 2025 remote has no colour or INFO keys, and the TV keeps GUIDE and AI. So ▶ opens
+  the options menu, ◀ the guide, holding OK toggles a favourite.
+- **Fast zapping:** while presses come within 400 ms only the banner follows; the stream starts 250 ms after the last.
+- **The app stays open for days** (TVs suspend apps). Guide blocks are reloaded after 3 h, the lineup every 6 h, and
+  every API request gives up after 15 s.
+- **EPG fields are often empty** (credits 19%, age rating 26%; year and pictures never), so details show only what
+  exists.
 
-17. **Programme details show only what the EPG has.** In a sample of 500 programmes, about 78% had a country, 45%
-    an episode number, 26% an age rating and 19% credits; year, star rating, pictures and "premiere" were never
-    filled. Episode numbers come as zero-based `xmltv_ns`. Some broadcasters put a year in the season slot; that is
-    dropped instead of shown as a season.
+## Project
 
-18. **Desktop Chrome instead of the webOS simulator.** UI work is developed and checked in desktop Chrome driven by
-    `tools/cdp.mjs`. LG's simulator is also a desktop Chromium without the TV's media pipeline, so it would not
-    catch the bugs that mattered (codecs, audio sync, multicast timing). Those need the real TV.
-
-19. **Dependabot alerts from the webOS CLI are dismissed, not fixed.** LG's `@webos-tools/cli` pins its whole
-    dependency tree with an `npm-shrinkwrap.json`, so `npm audit fix` and npm `overrides` have no effect. The
-    affected packages only run at build time and nothing from `node_modules` is shipped in the `.ipk`.
-
-20. **The relay keeps a few seconds of the current channel, and only that one.** The player starts ~0.5 s after
-    it has about 5 s of video; on a live multicast stream those 5 s take 5 s to arrive. HLS starts fast because a
-    segment brings them at once. A test on the TV (2026-11-13) held the stream back and sent it in one burst: the
-    player started 0.3 – 0.6 s after the burst. So the relay buffers the last 6 s of the channel it plays and sends
-    them first to every new connection, which makes reloads and audio switches ~0.5 s (playback runs ~6 s behind
-    live). Joining the neighbouring channels in advance would make channel switches fast as well, but costs each
-    channel's bitrate on the network the whole time, so it was left out for now.
-
-21. **For another audio track on an HLS channel, the relay filters Init7's HLS segments.** Until 2026-11-14 the
-    relay joined the channel's multicast stream for this, so the first switch took ~5 s (the player waits for ~5 s
-    of video, see 20). Init7's HLS segments are plain, unencrypted MPEG-TS of ~6 s that carry all audio tracks, so
-    the relay's audio filter works on them unchanged. The relay polls the playlist, fetches each new segment,
-    filters it and writes it to the player as one endless stream (`/hls?track=<n>&url=<playlist>`). A segment
-    brings several seconds at once, so no buffer has to be kept in advance.
-    - **Measured on the TV (2026-11-14):** a switch takes 1.3 – 1.8 s on Das Erste and 2.1 – 3 s on the Full HD SRF
-      channels, every time. Before, the first switch on a channel took ~5 s and later ones ~0.6 s. A prototype
-      that ran on a PC reached ~0.6 s; on the TV the relay needs 0.3 – 0.6 s to download and filter the first
-      segment (~1 s for Full HD), and the player about another second. No freezes in ~8 minutes of filtered
-      playback, and "Reload stream" and the remembered language keep the track.
-    - The player opens every stream a second time as a probe and waits for its answer. Fetched playlists and
-      segments are therefore shared between connections for a moment (3 s for segments); without that the probe
-      downloaded the segments again and a switch took 2.2 – 4 s.
-    - Tried and dropped: fetching the next segment only after the player has taken the previous one. No gain, and
-      one switch took 3.8 s.
-    - Tried and dropped: downloading the two start segments side by side. It was slower in an A/B test on the
-      TV (six switches each, medians): Das Erste 1.7 s instead of 1.4 s, SRF 1 (Full HD) 3.1 s instead of
-      2.1 s. The player starts on the first segment, and the second download slows the first one down.
-    - A segment that fails to download is tried once more after 0.3 s and skipped only then. If the stream can't
-      be started twice in a row (track gone, Init7 not reachable from the relay), the app falls back to the
-      channel's default track instead of retrying for good.
-    - The track is chosen by its index in the PMT, not by PID: HLS is a remux with its own PIDs, and the index
-      matches the order the player reports. So the switch no longer depends on the multicast track descriptions.
-    - **Two segments at the start.** Init7 publishes segments unevenly: mostly every ~5 s, at times 10 s apart.
-      A prototype that started with one segment froze for 6 s in two of three runs on the TV; with two segments,
-      six runs of 75 s (MP2 and AC-3) had no freeze, and lip sync was good by eye. The price: after a switch,
-      playback runs ~12 – 18 s behind live.
-    - Rejected alternative: keep the relay joined to the HLS channel's multicast group all the time. Equally
-      fast, but it costs the channel's bitrate on the network for as long as HLS is watched.
-    - The relay fetches only `https://*.init7.net`, so it can't be used to reach other hosts.
+- **Distribution:** sideloading in Developer Mode is the documented way; the app also runs on rooted TVs. The LG
+  Content Store is not an option for an unofficial client.
+- **Neutral name and id,** no Init7 branding, streams or broadcast screenshots, no telemetry.
+- **Desktop Chrome instead of LG's simulator** for UI work; the simulator has no TV media pipeline either, so
+  playback always needs the real TV.
+- **Dependabot alerts from LG's `@webos-tools/cli` are dismissed:** it pins its tree with a shrinkwrap, and nothing
+  from `node_modules` ships in the `.ipk`.

@@ -1,74 +1,68 @@
 # CLAUDE.md
 
-Unofficial LG webOS TV app for Init7 TV7. It has two parts:
-
-- a plain-DOM web UI in `src/app`;
-- a webOS JS service in `src/service` that relays multicast to HTTP on the TV.
-
-Human-facing docs:
-
-- [CONTRIBUTING.md](CONTRIBUTING.md): setup, commands, debugging
-- [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)
-- [docs/DECISIONS.md](docs/DECISIONS.md): why things are the way they are
-- [docs/API.md](docs/API.md): Init7 endpoints
-- [docs/ROADMAP.md](docs/ROADMAP.md): open ideas and TV tests
-
-Read the relevant one before changing behaviour.
+Unofficial LG webOS TV app for Init7 TV7: a plain-DOM web UI in `src/app` and a webOS JS service in `src/service`
+that relays multicast to HTTP on the TV. Read [docs/DECISIONS.md](docs/DECISIONS.md) before changing behaviour;
+[ARCHITECTURE](docs/ARCHITECTURE.md), [API](docs/API.md), [ROADMAP](docs/ROADMAP.md) and
+[CONTRIBUTING](CONTRIBUTING.md) cover the rest.
 
 ## Commands
 
 ```sh
 npm run check     # lint + format check + unit tests (same as CI), run before every commit
 npm test          # node --test, no TV needed
-npm run build     # bundle into build/ (app + service, manifests generated)
+npm run build     # bundle into build/
 npm run package   # build + dist/<appId>_<version>_all.ipk
-npm run dev       # dev build, package, install on the default TV and launch (Developer Mode or rooted TV;
-                  # on a rooted TV it falls back to an SSH install, see CONTRIBUTING.md → Rooted TVs)
-npm run inspect   # DevTools tunnel to the running app (takes ~30 s to print the URL)
+npm run dev       # dev build, install on the default TV and launch (falls back to SSH on a rooted TV)
+npm run inspect   # DevTools tunnel to the running app (~30 s until it prints the URL)
 ```
 
-The webOS CLI is a local dev dependency, so call it as `npx ares-*`, never as a global install.
+Call the webOS CLI as `npx ares-*` (local dev dependency), never globally.
 
 ## Layout
 
-- `src/app/js/`: ES modules bundled by esbuild into one IIFE (`build/app/app.js`).
-  - `main.js` is the entry point and does key routing.
-  - The other modules each cover one concern: `player`, `tracks`, `relay`, `epg`, `details`, `chlist`, `guide`, `menu`, and so on.
-- `src/service/`: CommonJS on the TV's Node.js.
-  - `relay-core.js` holds the pure helpers: PMT parsing, CRC-32, the audio filter, the backlog measurement.
-  - `service.js` holds the HTTP server and the Luna methods.
-- `scripts/`: `build.mjs` and `deploy.mjs`.
-  - The app id, title and version come from `package.json` (`webos`, `version`).
-  - Nothing else hard-codes the app id. At build time it is `__APP_ID__`; in the app it comes from `config.js`.
-- `test/`: unit tests for the pure logic. Keep DOM-free logic in testable modules.
-  - `service-hls.test.mjs` runs the real relay service with `webos-service` and `https.get` stubbed (it listens on port 8077).
-  - `player.test.mjs` runs `player.js` against a fake `<video>` element.
-- `tools/`: debugging helpers (`cdp.mjs`, `audio-compare.mjs`, …); see `tools/README.md`.
-  - `tools/probe/` is a separate throwaway app and is not linted or formatted.
+- `src/app/js/`: ES modules bundled into one IIFE. `main.js` is the entry and key router; one module per concern.
+- `src/service/`: CommonJS. `relay-core.js` = pure helpers (PMT, CRC-32, audio filter, buffer); `service.js` = HTTP
+  server and Luna methods.
+- `scripts/`: `build.mjs`, `deploy.mjs`. App id, title and version come only from `package.json`; never hard-code
+  the app id (`__APP_ID__` at build time, `config.js` in the app).
+- `test/`: unit tests. `service-hls.test.mjs` runs the real relay with stubs (port 8077); `player.test.mjs` runs
+  `player.js` against a fake `<video>`.
+- `tools/`: debugging helpers, see `tools/README.md`. `tools/probe/` is not linted.
 
-## Hard rules (learned the hard way, see DECISIONS.md)
+## Hard rules
 
-- **Streams need the native `<video>`.** Streams are DVB passthrough (MPEG-2/H.264 video, MP2/AC-3 audio), which hls.js and MSE can't play.
-- **The bundle targets `chrome68`.** It must keep running on older webOS. Don't add runtime dependencies or a UI framework.
-- **Multicast-only channels need the relay.** About 140 of the 242 channels can't be played by the web engine (it can't open `udp://`) and go through `http://127.0.0.1:8077/udp/<group>:<port>`.
-- **Never switch audio tracks inside the webOS player.** Using `audioTracks[i].enabled` or a live `selectTrack` desyncs or stalls the pipeline. On HLS, even a carefully timed `selectTrack` froze the picture for 8 – 12 s (re-tested 2026-11-14, decision 10). Instead, reload the stream through the relay, which filters the other audio PIDs and rewrites the PMT: `/hls?track=<n>` for an HLS channel (the relay fetches Init7's segments), `/udp/…?audio=<pid>` for a multicast-only channel. LG `selectTrack` is only a fallback.
-- **The HLS relay stream starts with two segments.** Init7 publishes segments unevenly (sometimes 10 s apart); with one segment the player froze for 6 s. The relay fetches only from `*.init7.net`. Fetching the two segments side by side was measured slower (decision 21).
-- **A single-track relay stream that fails twice falls back to the default track** (`filterGaveUp` in `player.js`). Keep that path when changing the retry logic, or a missing track retries for good.
-- **Track labels come from the multicast PMT** (`/info/<group>:<port>`). The special language codes (`mis`, `mul`, `und`, `zxx`, `nar`, `qaa`–`qtz`) are wildcards when matching, and are shown as the code rather than guessed.
-- **The app stays open for days** (TVs suspend apps instead of closing them). Anything loaded once goes stale: guide blocks are reloaded after 3 hours, the lineup every 6 hours. Keep that in mind for new cached data.
-- **The relay must not buffer without limit.** It writes the live stream without pausing the socket and drops a client at a 32 MB backlog.
-- **The player waits for ~5 s of video before it starts.** The relay keeps the current channel's last 6 s and sends them to each new connection at once (reload and audio switch ~0.5 s). It keeps only the current channel; joining more costs their bitrate on the network the whole time.
-- **EPG optional fields are often empty** (credits 19%, age rating 26%; year, pictures and star rating never). Show a detail only when it exists; see `docs/API.md` → EPG fields.
-- **UI changes are checked in desktop Chrome** with `tools/cdp.mjs` (see CONTRIBUTING.md → Testing without a TV), then once on the TV. Playback, audio and relay changes always need the TV.
-- **Remote:** the target is the LG AI Magic Remote. The TV grabs GUIDE, ♡ and AI, so don't rely on them. ◀ opens the guide, ▶ the menu, OK the channel list, and hold-OK toggles a favourite.
+- **Native `<video>` only.** DVB codecs (MPEG-2, MP2) don't play in hls.js/MSE.
+- **Target `chrome68`.** No runtime dependencies, no UI framework.
+- **Multicast goes through the relay** (`/udp/<group>:<port>`); the web engine can't open `udp://`.
+- **Never switch audio tracks inside the webOS player.** It desyncs, and on HLS `selectTrack` froze the picture for
+  8 – 12 s. Reload through the relay with only the chosen track: `/hls?track=<n>` (HLS) or `?audio=<pid>`
+  (multicast). LG `selectTrack` is only a fallback. See DECISIONS → [audio switching](docs/DECISIONS.md#audio-switching).
+- **`/hls` starts with the two newest segments** (Init7 publishes unevenly; one segment froze the player) and fetches
+  only from `*.init7.net`. Parallel download was measured slower. See [hls-relay](docs/DECISIONS.md#hls-relay).
+- **A single-track stream that fails twice falls back to the default track** (`filterGaveUp` in `player.js`). Keep
+  that path, or a missing track retries for good.
+- **The player waits for ~5 s of video.** The relay keeps the current channel's last 6 s and bursts them to each new
+  connection. Only the current channel: more joins cost bitrate the whole time.
+- **The relay never buffers without limit:** a client is dropped at a 32 MB backlog (64 MB for `/hls`).
+- **Track labels come from the multicast PMT** (`/info`). Special codes (`mis`, `mul`, `und`, `zxx`, `nar`,
+  `qaa`–`qtz`) are wildcards when matching and shown as the code, never guessed.
+- **The app stays open for days.** Cached data must expire (guide 3 h, lineup 6 h).
+- **EPG optional fields are often empty;** show a detail only when it exists.
+- **UI changes:** check in desktop Chrome with `tools/cdp.mjs`, then once on the TV. Playback, audio and relay
+  changes always need the TV.
+- **Remote:** LG AI Magic Remote. The TV grabs GUIDE, ♡ and AI. ◀ = guide, ▶ = menu, OK = channel list, hold OK =
+  favourite.
 
 ## Never commit
 
-- Personal setup: TV IPs, Developer Mode passphrases, MAC addresses, e-mail addresses, local paths. Put those in `*.local.md`, which is gitignored.
-- Decompiled code from the official Init7 apps, stream captures, or screenshots showing broadcast content. Hide the video before taking README screenshots.
+- Personal setup: TV IPs, Developer Mode passphrases, MAC addresses, e-mail addresses, local paths. Those go in
+  `*.local.md` (gitignored).
+- Decompiled code from the official Init7 apps, stream captures, or screenshots showing broadcast content. Hide the
+  video before taking README screenshots.
 
 ## Releasing
 
-Bump `version` in `package.json`, update `CHANGELOG.md`, commit, then tag `v<version>`. The release workflow checks that the tag matches the version, then builds the `.ipk` and attaches it. Release tags are protected, so a broken release needs a new version rather than a moved tag.
+Bump `version` in `package.json`, update `CHANGELOG.md`, commit, tag `v<version>`. The release workflow checks the
+tag against the version and attaches the `.ipk`. Tags are protected: a broken release needs a new version.
 
 @CLAUDE.local.md
